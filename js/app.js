@@ -9,67 +9,19 @@
 // INICIALIZACIÓN
 // =============================================
 
-// Esta función es llamada por firebase.js cuando Firebase está listo
-window.onFirebaseReady = function() {
-  // Overlay para cerrar sidebar en mobile
-  if (!document.getElementById('sidebar-overlay')) {
-    const overlay = document.createElement('div');
-    overlay.id = 'sidebar-overlay';
-    overlay.className = 'sidebar-overlay';
-    overlay.onclick = toggleSidebar;
-    document.body.appendChild(overlay);
-  }
-
-  // Iniciar Firebase Auth y esperar al usuario
-  initAuth(
-    // Usuario ha iniciado sesión
-    async (user) => {
-      const loginPhoto = document.getElementById('login-user-photo');
-      const loginName = document.getElementById('login-user-name');
-      if (loginPhoto) { loginPhoto.src = user.photoURL || ''; loginPhoto.style.display = 'block'; }
-      if (loginName) loginName.textContent = user.displayName || user.email || '';
-
-      // Cargar datos de la nube
-      const hasData = await loadDataCloud();
-
-      // Ocultar pantalla login
-      const loginScreen = document.getElementById('login-screen');
-      if (loginScreen) loginScreen.classList.add('hidden');
-
-      // Mostrar splash y luego la app
-      setTimeout(() => {
-        document.getElementById('splash-screen').style.opacity = '0';
-        setTimeout(() => {
-          document.getElementById('splash-screen').style.display = 'none';
-          if (!hasData || !APP.profile.name) {
-            showOnboarding();
-          } else {
-            startApp();
-          }
-        }, 500);
-      }, 1200);
-    },
-    // Usuario NO ha iniciado sesión
-    () => {
-      document.getElementById('splash-screen').style.opacity = '0';
-      setTimeout(() => {
-        document.getElementById('splash-screen').style.display = 'none';
-        const loginScreen = document.getElementById('login-screen');
-        if (loginScreen) loginScreen.classList.remove('hidden');
-      }, 500);
-    }
-  );
-};
-
 window.addEventListener('DOMContentLoaded', () => {
-  // firebase.js (módulo) se carga después y llamará a window.onFirebaseReady()
-  // Si por algún motivo no llega, mostramos login de todas formas
-  setTimeout(() => {
-    if (!window._firebaseInitialized) {
-      console.warn('Firebase tardó demasiado');
-    }
-  }, 5000);
+  // Overlay para cerrar sidebar en mobile
+  const overlay = document.createElement('div');
+  overlay.id = 'sidebar-overlay';
+  overlay.className = 'sidebar-overlay';
+  overlay.onclick = toggleSidebar;
+  document.body.appendChild(overlay);
+  // firebase.js (type=module) se encarga de detectar el login y arrancar la app
 });
+
+function showOnboarding() {
+  if (!APP) APP = getDefaultData();
+  document.getElementById('onboarding-modal').classList.remove('hidden');
   setupOnboardingListeners();
 }
 
