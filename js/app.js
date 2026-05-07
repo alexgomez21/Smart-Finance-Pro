@@ -10,13 +10,28 @@
 // =============================================
 
 window.addEventListener('DOMContentLoaded', () => {
+  // Cargar datos
+  const hasData = loadData();
+
+  // Splash
+  setTimeout(() => {
+    document.getElementById('splash-screen').style.opacity = '0';
+    setTimeout(() => {
+      document.getElementById('splash-screen').style.display = 'none';
+      if (!hasData || !APP.profile.name) {
+        showOnboarding();
+      } else {
+        startApp();
+      }
+    }, 500);
+  }, 2000);
+
   // Overlay para cerrar sidebar en mobile
   const overlay = document.createElement('div');
   overlay.id = 'sidebar-overlay';
   overlay.className = 'sidebar-overlay';
   overlay.onclick = toggleSidebar;
   document.body.appendChild(overlay);
-  // firebase.js (type=module) se encarga de detectar el login y arrancar la app
 });
 
 function showOnboarding() {
@@ -204,6 +219,18 @@ function updateNavUser() {
   const occEl = document.getElementById('nav-user-occ');
   if (nameEl) nameEl.textContent = APP.profile.name || 'Usuario';
   if (occEl) occEl.textContent = APP.profile.occupation || APP.profile.workType || '—';
+
+  // Foto en sidebar
+  const navAvatar = document.getElementById('nav-user-avatar');
+  if (navAvatar) {
+    const photoURL = APP.profile.photoURL ||
+      (typeof getCurrentUser === 'function' && getCurrentUser() ? getCurrentUser().photoURL : null);
+    if (photoURL) {
+      navAvatar.innerHTML = `<img src="${photoURL}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />`;
+    } else {
+      navAvatar.innerHTML = `<i class="fas fa-user-circle" style="font-size:2rem;color:var(--accent)"></i>`;
+    }
+  }
 }
 
 // =============================================
@@ -665,15 +692,42 @@ function renderPerfil() {
     p.hasCreditCard ? '💳 Tarjeta crédito' : ''
   ].filter(Boolean);
 
+  // Avatar: foto guardada, foto de Google, o ícono
+  const avatarEl = document.querySelector('.profile-avatar');
+  if (avatarEl) {
+    if (p.photoURL) {
+      avatarEl.innerHTML = `<img src="${p.photoURL}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />`;
+    } else {
+      const googleUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+      if (googleUser && googleUser.photoURL) {
+        avatarEl.innerHTML = `<img src="${googleUser.photoURL}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />`;
+      } else {
+        avatarEl.innerHTML = `<i class="fas fa-user"></i>`;
+      }
+    }
+    // Click en avatar para cambiar foto
+    avatarEl.style.cursor = 'pointer';
+    avatarEl.title = 'Cambiar foto';
+    avatarEl.onclick = () => document.getElementById('profile-photo-input').click();
+  }
+
   document.getElementById('profile-info-display').innerHTML = `
-    <div class="profile-name">${p.name || 'Sin nombre'}</div>
-    <div class="profile-occ">${p.occupation || '—'} · ${{ empleado: 'Empleado', independiente: 'Independiente', mixto: 'Mixto', desempleado: 'Desempleado', pensionado: 'Pensionado', estudiante: 'Estudiante' }[p.workType] || p.workType}</div>
-    <div class="profile-tags">${tags.map(t => `<span class="profile-tag">${t}</span>`).join('')}</div>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+      <div>
+        <div class="profile-name">${p.name || 'Sin nombre'}</div>
+        <div class="profile-occ">${p.occupation || '—'} · ${{ empleado: 'Empleado', independiente: 'Independiente', mixto: 'Mixto', desempleado: 'Desempleado', pensionado: 'Pensionado', estudiante: 'Estudiante' }[p.workType] || p.workType}</div>
+      </div>
+      <button onclick="openEditPerfil()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 14px;cursor:pointer;font-size:0.85rem;white-space:nowrap;flex-shrink:0;">
+        <i class="fas fa-pen"></i> Editar
+      </button>
+    </div>
+    <div class="profile-tags" style="margin-top:10px;">${tags.map(t => `<span class="profile-tag">${t}</span>`).join('')}</div>
     <div style="margin-top:12px;font-size:0.85rem;color:var(--text2);">
       Salario: <strong>${p.monthlySalary > 0 ? fmtCOP(p.monthlySalary) : 'No declarado'}</strong> · 
       Sustenta a: <strong>${p.peopleSupport} persona(s)</strong> · 
       Convive con: <strong>${p.peopleAtHome} persona(s)</strong>
-    </div>`;
+    </div>
+    <input type="file" id="profile-photo-input" accept="image/*" style="display:none" onchange="handleProfilePhoto(event)" />`;
 
   document.getElementById('indicators-table').innerHTML = `
     <div class="ind-row"><span class="ind-row-label">Salario mínimo 2026</span><span class="ind-row-val">${fmtCOP(COLOMBIA.salarioMinimo)}</span></div>
@@ -685,4 +739,67 @@ function renderPerfil() {
     <div class="ind-row"><span class="ind-row-label">Tasa de usura (abr 2026)</span><span class="ind-row-val" style="color:var(--danger)">${COLOMBIA.tasaUsura}% E.A.</span></div>
     <div class="ind-row"><span class="ind-row-label">Mejor CDT disponible (abr 2026)</span><span class="ind-row-val" style="color:var(--income)">${COLOMBIA.mejorCDT}% E.A.</span></div>
     <div class="ind-row" style="font-size:0.75rem;"><span class="ind-row-label" style="color:var(--text3)">Fuente: DANE / Superfinanciera Colombia</span><span class="ind-row-val" style="color:var(--text3)">Abr 2026</span></div>`;
+}
+
+// ---- Manejar foto de perfil ----
+function handleProfilePhoto(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) {
+    showToast('La foto debe pesar menos de 2MB', 'error');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    APP.profile.photoURL = e.target.result;
+    saveDataCloud();
+    showToast('Foto actualizada ✅', 'success');
+    renderPerfil();
+    updateNavUser();
+  };
+  reader.readAsDataURL(file);
+}
+
+// ---- Abrir modal de edición de perfil ----
+function openEditPerfil() {
+  const p = APP.profile;
+  document.getElementById('edit-perfil-name').value = p.name || '';
+  document.getElementById('edit-perfil-occupation').value = p.occupation || '';
+  document.getElementById('edit-perfil-city').value = p.city || '';
+  document.getElementById('edit-perfil-salary').value = p.monthlySalary || '';
+  document.getElementById('edit-perfil-worktype').value = p.workType || 'empleado';
+  document.getElementById('edit-perfil-people-home').value = p.peopleAtHome || 0;
+  document.getElementById('edit-perfil-people-support').value = p.peopleSupport || 0;
+  document.getElementById('edit-perfil-housing').value = p.housing || 'arriendo';
+  document.getElementById('edit-perfil-partner').checked = !!p.hasPartner;
+  document.getElementById('edit-perfil-children').checked = !!p.hasChildren;
+  document.getElementById('edit-perfil-pets').checked = !!p.hasPets;
+  document.getElementById('edit-perfil-modal').classList.remove('hidden');
+}
+
+function closeEditPerfil() {
+  document.getElementById('edit-perfil-modal').classList.add('hidden');
+}
+
+function saveEditPerfil() {
+  const p = APP.profile;
+  p.name = document.getElementById('edit-perfil-name').value.trim();
+  p.occupation = document.getElementById('edit-perfil-occupation').value.trim();
+  p.city = document.getElementById('edit-perfil-city').value.trim();
+  p.monthlySalary = parseFloat(document.getElementById('edit-perfil-salary').value) || 0;
+  p.workType = document.getElementById('edit-perfil-worktype').value;
+  p.peopleAtHome = parseInt(document.getElementById('edit-perfil-people-home').value) || 0;
+  p.peopleSupport = parseInt(document.getElementById('edit-perfil-people-support').value) || 0;
+  p.housing = document.getElementById('edit-perfil-housing').value;
+  p.hasPartner = document.getElementById('edit-perfil-partner').checked;
+  p.hasChildren = document.getElementById('edit-perfil-children').checked;
+  p.hasPets = document.getElementById('edit-perfil-pets').checked;
+
+  if (!p.name) { showToast('El nombre es obligatorio', 'error'); return; }
+
+  saveDataCloud();
+  closeEditPerfil();
+  showToast('Perfil actualizado ✅', 'success');
+  renderPerfil();
+  updateNavUser();
 }

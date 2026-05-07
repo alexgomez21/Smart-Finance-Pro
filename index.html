@@ -323,6 +323,7 @@
       <div class="user-info" id="sidebar-user">
         <div class="user-avatar"><i class="fas fa-user"></i></div>
         <div class="user-details">
+          <div id="nav-user-avatar" style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;background:var(--bg3);"><i class="fas fa-user-circle" style="font-size:2rem;color:var(--accent)"></i></div>
           <span class="user-name" id="nav-user-name">Usuario</span>
           <span class="user-occupation" id="nav-user-occ">—</span>
         </div>
@@ -761,6 +762,79 @@
         <p id="saldo-modal-msg"></p>
         <div class="source-options" id="source-options">
           <!-- Generado por JS -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDITAR PERFIL MODAL -->
+  <div id="edit-perfil-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3><i class="fas fa-user-pen"></i> Editar perfil</h3>
+        <button class="modal-close" onclick="closeEditPerfil()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;">
+        <div class="form-group">
+          <label class="form-label">Nombre *</label>
+          <input id="edit-perfil-name" class="form-input" type="text" placeholder="Tu nombre" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">¿A qué te dedicas?</label>
+          <input id="edit-perfil-occupation" class="form-input" type="text" placeholder="Vendedor, Contador, Estudiante..." />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tipo de trabajo</label>
+          <select id="edit-perfil-worktype" class="form-input">
+            <option value="empleado">Empleado</option>
+            <option value="independiente">Independiente</option>
+            <option value="mixto">Mixto</option>
+            <option value="desempleado">Desempleado</option>
+            <option value="pensionado">Pensionado</option>
+            <option value="estudiante">Estudiante</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Ciudad</label>
+          <input id="edit-perfil-city" class="form-input" type="text" placeholder="Barranquilla, Bogotá, Medellín..." />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Salario mensual (COP)</label>
+          <input id="edit-perfil-salary" class="form-input" type="number" placeholder="0" min="0" />
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="form-group">
+            <label class="form-label">Personas en casa</label>
+            <input id="edit-perfil-people-home" class="form-input" type="number" min="0" value="0" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Personas que sustentas</label>
+            <input id="edit-perfil-people-support" class="form-input" type="number" min="0" value="0" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Vivienda</label>
+          <select id="edit-perfil-housing" class="form-input">
+            <option value="arriendo">Arriendo</option>
+            <option value="propia">Casa propia</option>
+            <option value="hipoteca">Hipoteca</option>
+            <option value="familiar">Casa familiar</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.9rem;">
+            <input type="checkbox" id="edit-perfil-partner" /> ❤️ Tengo pareja
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.9rem;">
+            <input type="checkbox" id="edit-perfil-children" /> 👶 Tengo hijos
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.9rem;">
+            <input type="checkbox" id="edit-perfil-pets" /> 🐾 Tengo mascotas
+          </label>
+        </div>
+        <div style="display:flex;gap:12px;margin-top:8px;">
+          <button class="btn-secondary" onclick="closeEditPerfil()" style="flex:1;">Cancelar</button>
+          <button class="btn-primary" onclick="saveEditPerfil()" style="flex:2;"><i class="fas fa-save"></i> Guardar cambios</button>
         </div>
       </div>
     </div>
