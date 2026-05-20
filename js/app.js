@@ -833,7 +833,7 @@ Responde con estas secciones:
   try {
     const GEMINI_KEY = 'AIzaSyC5Jnb48f5dAHq-lLKIMcib_BiCzUAYu-0';
     const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -843,8 +843,26 @@ Responde con estas secciones:
         })
       }
     );
+
+    if (!resp.ok) {
+      const errData = await resp.json();
+      const errMsg = errData?.error?.message || 'Error desconocido';
+      result.innerHTML = `<div class="analysis-block" style="color:var(--expense);">❌ Error de Gemini: ${errMsg}</div>`;
+      loading.classList.add('hidden');
+      if (btn) btn.disabled = false;
+      return;
+    }
+
     const data = await resp.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sin respuesta';
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    if (!text) {
+      result.innerHTML = `<div class="analysis-block" style="color:var(--expense);">❌ Gemini no devolvió respuesta. Intenta de nuevo.</div>`;
+      loading.classList.add('hidden');
+      if (btn) btn.disabled = false;
+      return;
+    }
+
     const html = text
       .replace(/### (.+)/g, '<h3>$1</h3>')
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
@@ -853,8 +871,9 @@ Responde con estas secciones:
 
 /g, '<br/><br/>');
     result.innerHTML = `<div class="ia-result-block">${html}</div>`;
+
   } catch(e) {
-    result.innerHTML = `<div class="analysis-block" style="color:var(--expense);">❌ Error al conectar con Gemini. Revisa tu conexión e intenta de nuevo.</div>`;
+    result.innerHTML = `<div class="analysis-block" style="color:var(--expense);">❌ Error: ${e.message || 'Revisa tu conexión e intenta de nuevo.'}</div>`;
   }
   loading.classList.add('hidden');
   if (btn) btn.disabled = false;
