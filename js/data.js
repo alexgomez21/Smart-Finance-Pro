@@ -40,6 +40,7 @@ const TIPOS_INGRESO = [
   { id: 'pension', label: 'Pensión', icon: 'fa-umbrella' },
   { id: 'negocio', label: 'Negocio (especificar)', icon: 'fa-store', needsDetail: true },
   { id: 'inversion_retiro', label: 'Inversión / rendimiento', icon: 'fa-chart-bar' },
+  { id: 'robado_recuperado', label: 'Malversación de fondos', icon: 'fa-shield' },
   { id: 'otro', label: 'Otro', icon: 'fa-circle-plus' }
 ];
 
@@ -77,6 +78,7 @@ const TIPOS_GASTO = [
   { id: 'seg_social', label: 'Seguridad social (salud, pensión, ARL)', icon: 'fa-shield-halved' },
   { id: 'vehiculo', label: 'Vehículo (carro/moto)', icon: 'fa-car', hasSubtype: true },
   { id: 'azar_gasto', label: 'Juegos de azar', icon: 'fa-dice', isRisk: true },
+  { id: 'app_online', label: 'Compras en app / online', icon: 'fa-mobile-screen', isRisk: true },
   { id: 'otro_gasto', label: 'Otro', icon: 'fa-circle-plus' }
 ];
 
@@ -209,7 +211,6 @@ function loadData() {
 }
 
 function resetApp() {
-  // Nota: esto borra datos locales. Los datos en Firebase se borran al guardar vacío.
   if (confirm('¿Seguro que quieres borrar TODOS tus datos? Esta acción no se puede deshacer.')) {
     localStorage.removeItem('sfp_data');
     location.reload();

@@ -10,23 +10,6 @@
 // =============================================
 
 window.addEventListener('DOMContentLoaded', () => {
-  // Cargar datos
-  const hasData = loadData();
-
-  // Splash
-  setTimeout(() => {
-    document.getElementById('splash-screen').style.opacity = '0';
-    setTimeout(() => {
-      document.getElementById('splash-screen').style.display = 'none';
-      if (!hasData || !APP.profile.name) {
-        showOnboarding();
-      } else {
-        startApp();
-      }
-    }, 500);
-  }, 2000);
-
-  // Overlay para cerrar sidebar en mobile
   const overlay = document.createElement('div');
   overlay.id = 'sidebar-overlay';
   overlay.className = 'sidebar-overlay';
@@ -219,17 +202,12 @@ function updateNavUser() {
   const occEl = document.getElementById('nav-user-occ');
   if (nameEl) nameEl.textContent = APP.profile.name || 'Usuario';
   if (occEl) occEl.textContent = APP.profile.occupation || APP.profile.workType || '—';
-
-  // Foto en sidebar
   const navAvatar = document.getElementById('nav-user-avatar');
   if (navAvatar) {
-    const photoURL = APP.profile.photoURL ||
-      (typeof getCurrentUser === 'function' && getCurrentUser() ? getCurrentUser().photoURL : null);
-    if (photoURL) {
-      navAvatar.innerHTML = `<img src="${photoURL}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />`;
-    } else {
-      navAvatar.innerHTML = `<i class="fas fa-user-circle" style="font-size:2rem;color:var(--accent)"></i>`;
-    }
+    const photoURL = APP.profile.photoURL || (typeof getCurrentUser==='function' && getCurrentUser() ? getCurrentUser().photoURL : null);
+    navAvatar.innerHTML = photoURL
+      ? `<img src="${photoURL}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />`
+      : `<i class="fas fa-user-circle" style="font-size:2rem;color:var(--accent)"></i>`;
   }
 }
 
@@ -643,9 +621,240 @@ function renderReportes() {
     renderIncomeTypeChart();
     renderExpenseCatChart();
   }, 100);
-
   document.getElementById('reportes-analysis').innerHTML = generateAnalysis(reportPeriod);
+  poblarSelectsComparacion();
+  renderTopGastos();
+  renderFrecuentes();
+  renderComparacion();
 }
+
+function setReportSection(section, btn) {
+  document.querySelectorAll('.report-section').forEach(s => s.classList.add('hidden'));
+  document.querySelectorAll('.report-section-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('rs-' + section).classList.remove('hidden');
+  if (btn) btn.classList.add('active');
+  if (section === 'graficas') setTimeout(() => { renderMonthlyChart(); renderIncomeTypeChart(); renderExpenseCatChart(); }, 100);
+  if (section === 'top-gastos') renderTopGastos();
+  if (section === 'frecuentes') renderFrecuentes();
+  if (section === 'comparacion') renderComparacion();
+}
+
+function getTxPeriodo(tipo) {
+  const now = new Date();
+  const m = now.getMonth();
+  const y = now.getFullYear();
+  if (reportPeriod === 'mes') {
+    return APP.transactions.filter(tx => {
+      const d = new Date(tx.date + 'T12:00:00');
+      return d.getMonth() === m && d.getFullYear() === y && (!tipo || tx.type === tipo);
+    });
+  }
+  if (reportPeriod === 'trimestre') {
+    const inicio = new Date(y, m - 2, 1);
+    return APP.transactions.filter(tx => {
+      const d = new Date(tx.date + 'T12:00:00');
+      return d >= inicio && (!tipo || tx.type === tipo);
+    });
+  }
+  return APP.transactions.filter(tx => {
+    const d = new Date(tx.date + 'T12:00:00');
+    return d.getFullYear() === y && (!tipo || tx.type === tipo);
+  });
+}
+
+function renderTopGastos() {
+  const gastos = getTxPeriodo('gasto').sort((a, b) => b.amount - a.amount).slice(0, 10);
+  const container = document.getElementById('top-gastos-list');
+  if (!gastos.length) {
+    container.innerHTML = '<div class="empty-state"><i class="fas fa-receipt"></i><p>Sin gastos en este periodo</p></div>';
+    return;
+  }
+  const ranks = ['🥇','🥈','🥉'];
+  const rankCls = ['gold','silver','bronze'];
+  const catLabel = id => (TIPOS_GASTO.find(t => t.id === id) || {label: id}).label;
+  container.innerHTML = gastos.map((tx, i) => `
+    <div class="top-gasto-item">
+      <div class="top-gasto-rank ${rankCls[i] || ''}">${ranks[i] || '#'+(i+1)}</div>
+      <div class="top-gasto-info">
+        <div class="top-gasto-desc">${tx.description || catLabel(tx.category)}</div>
+        <div class="top-gasto-cat">${catLabel(tx.category)} · ${tx.date}</div>
+      </div>
+      <div class="top-gasto-amount">-${fmtCOP(tx.amount)}</div>
+    </div>`).join('');
+}
+
+function renderFrecuentes() {
+  const gastos = getTxPeriodo('gasto');
+  const container = document.getElementById('frecuentes-list');
+  if (!gastos.length) {
+    container.innerHTML = '<div class="empty-state"><i class="fas fa-repeat"></i><p>Sin gastos en este periodo</p></div>';
+    return;
+  }
+  const freq = {}, totales = {};
+  gastos.forEach(tx => {
+    const k = tx.category || 'otro_gasto';
+    freq[k] = (freq[k] || 0) + 1;
+    totales[k] = (totales[k] || 0) + tx.amount;
+  });
+  const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const maxFreq = sorted[0][1];
+  const catLabel = id => (TIPOS_GASTO.find(t => t.id === id) || {label: id}).label;
+  container.innerHTML = sorted.map(([cat, count]) => `
+    <div class="freq-item">
+      <div class="freq-bar-wrap">
+        <div class="freq-label">
+          <span>${catLabel(cat)}</span>
+          <span style="color:var(--expense);font-weight:700;">${fmtCOP(totales[cat])}</span>
+        </div>
+        <div class="freq-bar-bg">
+          <div class="freq-bar-fill" style="width:${Math.round(count/maxFreq*100)}%"></div>
+        </div>
+      </div>
+      <div class="freq-count">${count} vez${count>1?'es':''}</div>
+    </div>`).join('');
+}
+
+function poblarSelectsComparacion() {
+  const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const now = new Date();
+  const opciones = [];
+  for (let i = 12; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    opciones.push({ label: `${meses[d.getMonth()]} ${d.getFullYear()}`, m: d.getMonth(), y: d.getFullYear() });
+  }
+  const makeOptions = (selIdx) => opciones.map((o, i) =>
+    `<option value="${o.m},${o.y}" ${i===selIdx?'selected':''}>${o.label}</option>`).join('');
+  const selA = document.getElementById('cmp-mes-a');
+  const selB = document.getElementById('cmp-mes-b');
+  if (selA && selB) {
+    selA.innerHTML = makeOptions(opciones.length - 2);
+    selB.innerHTML = makeOptions(opciones.length - 1);
+  }
+}
+
+function renderComparacion() {
+  const selA = document.getElementById('cmp-mes-a');
+  const selB = document.getElementById('cmp-mes-b');
+  const container = document.getElementById('comparacion-result');
+  if (!selA || !selB || !container) return;
+  const [mA, yA] = selA.value.split(',').map(Number);
+  const [mB, yB] = selB.value.split(',').map(Number);
+  const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const txA = APP.transactions.filter(tx => { const d = new Date(tx.date+'T12:00:00'); return d.getMonth()===mA && d.getFullYear()===yA; });
+  const txB = APP.transactions.filter(tx => { const d = new Date(tx.date+'T12:00:00'); return d.getMonth()===mB && d.getFullYear()===yB; });
+  const sum = (txs, tipo) => txs.filter(t => t.type===tipo).reduce((s,t)=>s+t.amount,0);
+  const ingA=sum(txA,'ingreso'), ingB=sum(txB,'ingreso');
+  const gasA=sum(txA,'gasto'),   gasB=sum(txB,'gasto');
+  const invA=sum(txA,'inversion'), invB=sum(txB,'inversion');
+  const balA=ingA-gasA-invA, balB=ingB-gasB-invB;
+  const cntA=txA.filter(t=>t.type==='gasto').length, cntB=txB.filter(t=>t.type==='gasto').length;
+
+  const diff = (a, b, inv=false) => {
+    if (a===0 && b===0) return '';
+    const d=b-a, pct=a>0?Math.abs(d/a*100).toFixed(1):'—';
+    const mejor = inv ? d<0 : d>0;
+    return `<span class="${mejor?'cmp-diff-pos':'cmp-diff-neg'}">${d>0?'▲':'▼'} ${pct}%</span>`;
+  };
+  const row = (label, a, b, inv=false) => `
+    <div class="cmp-row">
+      <span class="cmp-label">${label}</span>
+      <div class="cmp-vals">
+        <span class="cmp-a">${fmtCOP(a)}</span>
+        <span class="cmp-b">${fmtCOP(b)}</span>
+        ${diff(a,b,inv)}
+      </div>
+    </div>`;
+
+  const msgBalance = balB>balA
+    ? `<div style="background:rgba(0,201,167,0.1);border:1px solid var(--accent);border-radius:10px;padding:12px;font-size:0.85rem;color:var(--accent);">✅ <strong>${meses[mB]}</strong> fue mejor — balance mejoró ${fmtCOP(balB-balA)}</div>`
+    : balA>balB
+    ? `<div style="background:rgba(255,80,80,0.08);border:1px solid var(--expense);border-radius:10px;padding:12px;font-size:0.85rem;color:var(--expense);">⚠️ <strong>${meses[mB]}</strong> estuvo por debajo — balance bajó ${fmtCOP(balA-balB)}</div>`
+    : `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:0.85rem;color:var(--text2);">➡️ Ambos meses tuvieron el mismo balance</div>`;
+
+  container.innerHTML = `
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:0.8rem;font-weight:700;padding:0 4px;">
+      <span></span>
+      <div style="display:flex;gap:16px;">
+        <span style="color:var(--accent);">${meses[mA]}</span>
+        <span style="color:var(--warning);">${meses[mB]}</span>
+        <span style="color:var(--text3);min-width:50px;">Δ</span>
+      </div>
+    </div>
+    <div class="cmp-card">
+      ${row('💰 Ingresos', ingA, ingB)}
+      ${row('🔴 Gastos', gasA, gasB, true)}
+      ${row('📈 Inversiones', invA, invB)}
+      ${row('✅ Balance', balA, balB)}
+      ${row('🔢 N° gastos', cntA, cntB, true)}
+    </div>
+    ${msgBalance}`;
+}
+
+async function runIAAnalysis() {
+  const btn = document.querySelector('#rs-ia .btn-primary');
+  const loading = document.getElementById('ia-loading');
+  const result = document.getElementById('ia-result');
+  if (btn) btn.disabled = true;
+  loading.classList.remove('hidden');
+  result.innerHTML = '';
+
+  const gastos = getTxPeriodo('gasto');
+  const ingresos = getTxPeriodo('ingreso');
+  const totalGastos = gastos.reduce((s,t)=>s+t.amount,0);
+  const totalIngresos = ingresos.reduce((s,t)=>s+t.amount,0);
+  const balance = totalIngresos - totalGastos;
+  const freq = {};
+  gastos.forEach(tx => { freq[tx.category]=(freq[tx.category]||0)+tx.amount; });
+  const topCats = Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,5)
+    .map(([cat,amt])=>`${(TIPOS_GASTO.find(t=>t.id===cat)||{label:cat}).label}: ${fmtCOP(amt)}`).join(', ');
+
+  const p = APP.profile;
+  const periodo = reportPeriod==='mes'?'Este mes':reportPeriod==='trimestre'?'Últimos 3 meses':'Este año';
+  const prompt = `Eres un asesor financiero experto en finanzas personales para Colombia. Analiza esta información y da consejos prácticos y personalizados. Responde en español con secciones claras.
+
+PERFIL: ${p.name||'Usuario'}, ${p.occupation||''}, ${p.city||'Colombia'}, trabajo: ${p.workType||'empleado'}
+PERIODO: ${periodo}
+INGRESOS: ${fmtCOP(totalIngresos)}
+GASTOS: ${fmtCOP(totalGastos)}
+BALANCE: ${fmtCOP(balance)}
+RATIO GASTO/INGRESO: ${totalIngresos>0?(totalGastos/totalIngresos*100).toFixed(1):'N/A'}%
+TOP GASTOS POR CATEGORÍA: ${topCats||'Sin datos'}
+DEUDAS ACTIVAS: ${fmtCOP(calcTotalDeuda())}
+AHORROS: ${fmtCOP(calcTotalAhorros())}
+SALDO DISPONIBLE: ${fmtCOP(getCurrentSaldo())}
+SALARIO MÍNIMO 2026: $1.750.905 | INFLACIÓN: 5.56% | TASA USURA: 26.76% E.A.
+
+Responde con estas secciones:
+### 📊 Diagnóstico general
+### ⚠️ Alertas
+### 💡 Top 3 recomendaciones
+### 🎯 Meta para el próximo mes`;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await resp.json();
+    const text = (data.content||[]).map(c=>c.text||'').join('') || 'Sin respuesta';
+    const html = text
+      .replace(/### (.+)/g, '<h3>$1</h3>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/^- (.+)/gm, '<li>$1</li>')
+      .replace(/\n\n/g, '<br/><br/>');
+    result.innerHTML = `<div class="ia-result-block">${html}</div>`;
+  } catch(e) {
+    result.innerHTML = `<div class="analysis-block" style="color:var(--expense);">❌ Error al conectar con la IA. Revisa tu conexión.</div>`;
+  }
+  loading.classList.add('hidden');
+  if (btn) btn.disabled = false;
+}
+
 
 // =============================================
 // JUEGOS DE AZAR
@@ -692,42 +901,15 @@ function renderPerfil() {
     p.hasCreditCard ? '💳 Tarjeta crédito' : ''
   ].filter(Boolean);
 
-  // Avatar: foto guardada, foto de Google, o ícono
-  const avatarEl = document.querySelector('.profile-avatar');
-  if (avatarEl) {
-    if (p.photoURL) {
-      avatarEl.innerHTML = `<img src="${p.photoURL}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />`;
-    } else {
-      const googleUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
-      if (googleUser && googleUser.photoURL) {
-        avatarEl.innerHTML = `<img src="${googleUser.photoURL}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />`;
-      } else {
-        avatarEl.innerHTML = `<i class="fas fa-user"></i>`;
-      }
-    }
-    // Click en avatar para cambiar foto
-    avatarEl.style.cursor = 'pointer';
-    avatarEl.title = 'Cambiar foto';
-    avatarEl.onclick = () => document.getElementById('profile-photo-input').click();
-  }
-
   document.getElementById('profile-info-display').innerHTML = `
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
-      <div>
-        <div class="profile-name">${p.name || 'Sin nombre'}</div>
-        <div class="profile-occ">${p.occupation || '—'} · ${{ empleado: 'Empleado', independiente: 'Independiente', mixto: 'Mixto', desempleado: 'Desempleado', pensionado: 'Pensionado', estudiante: 'Estudiante' }[p.workType] || p.workType}</div>
-      </div>
-      <button onclick="openEditPerfil()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 14px;cursor:pointer;font-size:0.85rem;white-space:nowrap;flex-shrink:0;">
-        <i class="fas fa-pen"></i> Editar
-      </button>
-    </div>
-    <div class="profile-tags" style="margin-top:10px;">${tags.map(t => `<span class="profile-tag">${t}</span>`).join('')}</div>
+    <div class="profile-name">${p.name || 'Sin nombre'}</div>
+    <div class="profile-occ">${p.occupation || '—'} · ${{ empleado: 'Empleado', independiente: 'Independiente', mixto: 'Mixto', desempleado: 'Desempleado', pensionado: 'Pensionado', estudiante: 'Estudiante' }[p.workType] || p.workType}</div>
+    <div class="profile-tags">${tags.map(t => `<span class="profile-tag">${t}</span>`).join('')}</div>
     <div style="margin-top:12px;font-size:0.85rem;color:var(--text2);">
       Salario: <strong>${p.monthlySalary > 0 ? fmtCOP(p.monthlySalary) : 'No declarado'}</strong> · 
       Sustenta a: <strong>${p.peopleSupport} persona(s)</strong> · 
       Convive con: <strong>${p.peopleAtHome} persona(s)</strong>
-    </div>
-    <input type="file" id="profile-photo-input" accept="image/*" style="display:none" onchange="handleProfilePhoto(event)" />`;
+    </div>`;
 
   document.getElementById('indicators-table').innerHTML = `
     <div class="ind-row"><span class="ind-row-label">Salario mínimo 2026</span><span class="ind-row-val">${fmtCOP(COLOMBIA.salarioMinimo)}</span></div>
@@ -739,67 +921,4 @@ function renderPerfil() {
     <div class="ind-row"><span class="ind-row-label">Tasa de usura (abr 2026)</span><span class="ind-row-val" style="color:var(--danger)">${COLOMBIA.tasaUsura}% E.A.</span></div>
     <div class="ind-row"><span class="ind-row-label">Mejor CDT disponible (abr 2026)</span><span class="ind-row-val" style="color:var(--income)">${COLOMBIA.mejorCDT}% E.A.</span></div>
     <div class="ind-row" style="font-size:0.75rem;"><span class="ind-row-label" style="color:var(--text3)">Fuente: DANE / Superfinanciera Colombia</span><span class="ind-row-val" style="color:var(--text3)">Abr 2026</span></div>`;
-}
-
-// ---- Manejar foto de perfil ----
-function handleProfilePhoto(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  if (file.size > 2 * 1024 * 1024) {
-    showToast('La foto debe pesar menos de 2MB', 'error');
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    APP.profile.photoURL = e.target.result;
-    saveDataCloud();
-    showToast('Foto actualizada ✅', 'success');
-    renderPerfil();
-    updateNavUser();
-  };
-  reader.readAsDataURL(file);
-}
-
-// ---- Abrir modal de edición de perfil ----
-function openEditPerfil() {
-  const p = APP.profile;
-  document.getElementById('edit-perfil-name').value = p.name || '';
-  document.getElementById('edit-perfil-occupation').value = p.occupation || '';
-  document.getElementById('edit-perfil-city').value = p.city || '';
-  document.getElementById('edit-perfil-salary').value = p.monthlySalary || '';
-  document.getElementById('edit-perfil-worktype').value = p.workType || 'empleado';
-  document.getElementById('edit-perfil-people-home').value = p.peopleAtHome || 0;
-  document.getElementById('edit-perfil-people-support').value = p.peopleSupport || 0;
-  document.getElementById('edit-perfil-housing').value = p.housing || 'arriendo';
-  document.getElementById('edit-perfil-partner').checked = !!p.hasPartner;
-  document.getElementById('edit-perfil-children').checked = !!p.hasChildren;
-  document.getElementById('edit-perfil-pets').checked = !!p.hasPets;
-  document.getElementById('edit-perfil-modal').classList.remove('hidden');
-}
-
-function closeEditPerfil() {
-  document.getElementById('edit-perfil-modal').classList.add('hidden');
-}
-
-function saveEditPerfil() {
-  const p = APP.profile;
-  p.name = document.getElementById('edit-perfil-name').value.trim();
-  p.occupation = document.getElementById('edit-perfil-occupation').value.trim();
-  p.city = document.getElementById('edit-perfil-city').value.trim();
-  p.monthlySalary = parseFloat(document.getElementById('edit-perfil-salary').value) || 0;
-  p.workType = document.getElementById('edit-perfil-worktype').value;
-  p.peopleAtHome = parseInt(document.getElementById('edit-perfil-people-home').value) || 0;
-  p.peopleSupport = parseInt(document.getElementById('edit-perfil-people-support').value) || 0;
-  p.housing = document.getElementById('edit-perfil-housing').value;
-  p.hasPartner = document.getElementById('edit-perfil-partner').checked;
-  p.hasChildren = document.getElementById('edit-perfil-children').checked;
-  p.hasPets = document.getElementById('edit-perfil-pets').checked;
-
-  if (!p.name) { showToast('El nombre es obligatorio', 'error'); return; }
-
-  saveDataCloud();
-  closeEditPerfil();
-  showToast('Perfil actualizado ✅', 'success');
-  renderPerfil();
-  updateNavUser();
 }
