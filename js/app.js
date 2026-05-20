@@ -831,25 +831,30 @@ Responde con estas secciones:
 ### 🎯 Meta para el próximo mes`;
 
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
+    const GEMINI_KEY = 'AIzaSyC5Jnb48f5dAHq-lLKIMcib_BiCzUAYu-0';
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 1000, temperature: 0.7 }
+        })
+      }
+    );
     const data = await resp.json();
-    const text = (data.content||[]).map(c=>c.text||'').join('') || 'Sin respuesta';
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sin respuesta';
     const html = text
       .replace(/### (.+)/g, '<h3>$1</h3>')
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
       .replace(/^- (.+)/gm, '<li>$1</li>')
-      .replace(/\n\n/g, '<br/><br/>');
+      .replace(/
+
+/g, '<br/><br/>');
     result.innerHTML = `<div class="ia-result-block">${html}</div>`;
   } catch(e) {
-    result.innerHTML = `<div class="analysis-block" style="color:var(--expense);">❌ Error al conectar con la IA. Revisa tu conexión.</div>`;
+    result.innerHTML = `<div class="analysis-block" style="color:var(--expense);">❌ Error al conectar con Gemini. Revisa tu conexión e intenta de nuevo.</div>`;
   }
   loading.classList.add('hidden');
   if (btn) btn.disabled = false;
