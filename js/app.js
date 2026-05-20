@@ -831,7 +831,7 @@ Responde con estas secciones:
 ### 🎯 Meta para el próximo mes`;
 
   try {
-    const GEMINI_KEY = 'AIzaSyC5Jnb48f5dAHq-lLKIMcib_BiCzUAYu-0';
+    const GEMINI_KEY = 'AIzaSyA34uO3y3Lu89ao14zzAR_CcOTIVACvXzU';
     const resp = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,
       {
