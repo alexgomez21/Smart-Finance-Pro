@@ -346,7 +346,6 @@
       </div>
 
       <div class="user-info" id="sidebar-user">
-        <div class="user-avatar"><i class="fas fa-user"></i></div>
         <div class="user-details">
           <div id="nav-user-avatar" style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;background:var(--bg3);"><i class="fas fa-user-circle" style="font-size:2rem;color:var(--accent)"></i></div>
           <span class="user-name" id="nav-user-name">Usuario</span>
@@ -665,20 +664,59 @@
           <button class="period-tab" onclick="setPeriod('trimestre', this)">Trimestre</button>
           <button class="period-tab" onclick="setPeriod('anual', this)">Anual</button>
         </div>
-        <div class="section-title">Evolución mensual</div>
-        <div class="chart-container tall">
-          <canvas id="chart-monthly"></canvas>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+          <button class="report-section-tab active" onclick="setReportSection('graficas', this)">📊 Gráficas</button>
+          <button class="report-section-tab" onclick="setReportSection('top-gastos', this)">🔴 Top Gastos</button>
+          <button class="report-section-tab" onclick="setReportSection('frecuentes', this)">🔁 Frecuentes</button>
+          <button class="report-section-tab" onclick="setReportSection('comparacion', this)">📅 Comparar</button>
+          <button class="report-section-tab" onclick="setReportSection('ia', this)">🤖 IA</button>
         </div>
-        <div class="section-title">Ingresos por tipo</div>
-        <div class="chart-container">
-          <canvas id="chart-income-type"></canvas>
+        <div id="rs-graficas" class="report-section">
+          <div class="section-title">Evolución mensual</div>
+          <div class="chart-container tall"><canvas id="chart-monthly"></canvas></div>
+          <div class="section-title">Ingresos por tipo</div>
+          <div class="chart-container"><canvas id="chart-income-type"></canvas></div>
+          <div class="section-title">Gastos por categoría</div>
+          <div class="chart-container"><canvas id="chart-expense-cat"></canvas></div>
         </div>
-        <div class="section-title">Gastos por categoría</div>
-        <div class="chart-container">
-          <canvas id="chart-expense-cat"></canvas>
+        <div id="rs-top-gastos" class="report-section hidden">
+          <div class="section-title">Gastos más altos del periodo</div>
+          <div id="top-gastos-list"></div>
         </div>
-        <div class="section-title">Análisis inteligente del periodo</div>
-        <div id="reportes-analysis" class="analysis-block"></div>
+        <div id="rs-frecuentes" class="report-section hidden">
+          <div class="section-title">Gastos más frecuentes del periodo</div>
+          <div id="frecuentes-list"></div>
+        </div>
+        <div id="rs-comparacion" class="report-section hidden">
+          <div class="section-title">Comparación mensual</div>
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:130px;">
+              <label style="font-size:0.8rem;color:var(--text2);display:block;margin-bottom:4px;">Mes A</label>
+              <select id="cmp-mes-a" class="form-input" onchange="renderComparacion()"></select>
+            </div>
+            <div style="font-size:1.4rem;color:var(--text3);padding-top:18px;">vs</div>
+            <div style="flex:1;min-width:130px;">
+              <label style="font-size:0.8rem;color:var(--text2);display:block;margin-bottom:4px;">Mes B</label>
+              <select id="cmp-mes-b" class="form-input" onchange="renderComparacion()"></select>
+            </div>
+          </div>
+          <div id="comparacion-result"></div>
+        </div>
+        <div id="rs-ia" class="report-section hidden">
+          <div class="section-title">Análisis con Inteligencia Artificial</div>
+          <div style="background:var(--bg2);border-radius:var(--radius);border:1px solid var(--border);padding:16px;margin-bottom:12px;font-size:0.88rem;color:var(--text2);line-height:1.6;">
+            🤖 La IA analizará tus ingresos, gastos, ahorros y deudas del periodo y te dará consejos personalizados para Colombia.
+          </div>
+          <button class="btn-primary" style="width:100%;margin-bottom:16px;" onclick="runIAAnalysis()">
+            <i class="fas fa-brain"></i> Analizar mis finanzas con IA
+          </button>
+          <div id="ia-loading" class="hidden" style="text-align:center;padding:24px;color:var(--text2);">
+            <i class="fas fa-spinner fa-spin" style="font-size:2rem;color:var(--accent);margin-bottom:12px;display:block;"></i>
+            Analizando tus finanzas...
+          </div>
+          <div id="ia-result"></div>
+          <div id="reportes-analysis" class="analysis-block"></div>
+        </div>
       </section>
 
       <!-- ===== JUEGOS DE AZAR ===== -->
@@ -707,9 +745,9 @@
         <div class="page-header">
           <h1 class="page-title">Mi Perfil</h1>
         </div>
-        <div class="profile-card">
-          <div class="profile-avatar"><i class="fas fa-user"></i></div>
-          <div class="profile-info" id="profile-info-display"></div>
+        <div class="profile-card" style="flex-direction:column;align-items:center;text-align:center;">
+          <div class="profile-avatar" style="width:90px;height:90px;font-size:2.2rem;margin:0 auto;"><i class="fas fa-user"></i></div>
+          <div class="profile-info" id="profile-info-display" style="width:100%;"></div>
         </div>
         <div class="section-title">Acciones</div>
         <div class="profile-actions">
@@ -721,6 +759,28 @@
         </div>
         <div class="section-title">Indicadores Colombia (Referencia)</div>
         <div class="indicators-table" id="indicators-table"></div>
+
+        <!-- DESCRIPCIÓN PWA + CRÉDITOS -->
+        <div style="margin-top:28px;background:var(--bg2);border-radius:var(--radius);border:1px solid var(--border);padding:24px;text-align:center;">
+          <div style="font-size:2.5rem;margin-bottom:12px;">📱</div>
+          <div style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:8px;">Smart Finance Personal</div>
+          <div style="font-size:0.85rem;color:var(--text2);line-height:1.6;margin-bottom:16px;">
+            Aplicación Web Progresiva (PWA) para el control inteligente de tus finanzas personales.<br/>
+            Funciona sin internet, se instala en tu celular y guarda tus datos de forma segura en la nube.<br/>
+            Diseñada especialmente para Colombia 🇨🇴
+          </div>
+          <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+            <span style="background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:0.78rem;color:var(--accent);">⚡ PWA</span>
+            <span style="background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:0.78rem;color:var(--accent);">☁️ Firebase</span>
+            <span style="background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:0.78rem;color:var(--accent);">🤖 IA</span>
+            <span style="background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:0.78rem;color:var(--accent);">🔒 Seguro</span>
+          </div>
+          <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px;">
+            <div style="font-size:0.82rem;color:var(--text3);">Desarrollado por</div>
+            <div style="font-size:1rem;font-weight:800;color:var(--text);margin-top:4px;">Alex Gómez</div>
+            <div style="font-size:0.78rem;color:var(--text3);margin-top:2px;">© 2026 · Todos los derechos reservados</div>
+          </div>
+        </div>
       </section>
 
     </main><!-- end main-content -->
