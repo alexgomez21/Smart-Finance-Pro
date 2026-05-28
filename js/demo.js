@@ -4,8 +4,9 @@
    ============================================= */
 
 function loadDemoData() {
-  // Solo cargar demo si no hay transacciones
+  // Solo cargar demo si no hay transacciones y no se reinició manualmente
   if (APP.transactions.length > 0) return;
+  if (localStorage.getItem('sfp_no_demo') === '1') return;
 
   const today = todayStr();
   const thisMonth = today.substr(0, 7);

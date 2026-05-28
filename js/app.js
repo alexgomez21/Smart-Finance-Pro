@@ -27,6 +27,11 @@ function startApp() {
   // Cargar datos demo si la app está vacía
   loadDemoData();
 
+  // Cargar indicadores guardados en APP (si existen)
+  if (APP.economicRef && APP.economicRef.salarioMinimo) {
+    Object.assign(COLOMBIA, APP.economicRef);
+  }
+
   // Aplicar tema guardado
   const body = document.getElementById('app-body');
   body.className = APP.theme === 'light' ? 'light-theme' : 'dark-theme';
@@ -43,6 +48,9 @@ function startApp() {
   document.getElementById('main-app').classList.remove('hidden');
   updateNavUser();
   navTo('dashboard');
+
+  // Actualizar indicadores Colombia si es un mes nuevo (en background)
+  setTimeout(() => updateColombiaIndicators(false), 3000);
 }
 
 // =============================================
@@ -265,18 +273,50 @@ function renderDashboard() {
   const saldoEl = document.getElementById('dash-saldo');
   saldoEl.style.color = saldo < 0 ? 'var(--expense)' : 'var(--income)';
 
-  // Comparaciones
-  const comps = generateComparisons();
-  const compList = document.getElementById('comparison-list');
-  if (comps.length === 0) {
-    compList.innerHTML = '<div class="empty-state"><i class="fas fa-chart-pie"></i><p>Registra más datos para ver comparaciones</p></div>';
-  } else {
-    compList.innerHTML = comps.map(c => `
-      <div class="comparison-item">
-        <div class="comp-icon">${c.icon}</div>
-        <div class="comp-text">${c.text}</div>
-        <div class="comp-status ${c.status}">${c.label}</div>
-      </div>`).join('');
+  // Porcentaje de inversión mensual
+  const invWidget = document.getElementById('inv-pct-widget');
+  if (invWidget) {
+    const pctInv = ingresos > 0 ? (inversiones / ingresos) * 100 : 0;
+    const pctGasto = ingresos > 0 ? Math.min((gastos / ingresos) * 100, 100) : 0;
+    const pctRest = Math.max(0, 100 - pctInv - pctGasto);
+    const recPct = 20;
+    let statusColor = pctInv >= recPct ? 'var(--income)' : pctInv >= 10 ? 'var(--warning)' : 'var(--expense)';
+    let statusMsg = pctInv >= recPct ? '¡Excelente! Superas el 20% recomendado' :
+                    pctInv >= 10 ? 'Bien, pero puedes aumentar un poco más' :
+                    ingresos === 0 ? 'Registra ingresos para ver tu porcentaje' :
+                    'Intenta destinar al menos el 20% a inversión';
+    const circ = 2 * Math.PI * 42;
+    const dash = (pctInv / 100 * circ).toFixed(1);
+    invWidget.innerHTML = `
+      <div class="inv-pct-main">
+        <div class="inv-pct-circle-wrap">
+          <svg viewBox="0 0 100 100" class="inv-pct-svg">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="var(--bg3)" stroke-width="10"/>
+            <circle cx="50" cy="50" r="42" fill="none" stroke="${statusColor}" stroke-width="10"
+              stroke-dasharray="${dash} ${circ.toFixed(1)}"
+              stroke-dashoffset="${(circ * 0.25).toFixed(1)}" stroke-linecap="round"/>
+          </svg>
+          <div class="inv-pct-label">
+            <span class="inv-pct-num" style="color:${statusColor}">${pctInv.toFixed(1)}%</span>
+            <span class="inv-pct-sub">invertido</span>
+          </div>
+        </div>
+        <div class="inv-pct-details">
+          <div class="inv-pct-row"><span class="inv-pct-dot" style="background:${statusColor}"></span><span>Inversión: <strong>${fmtCOP(inversiones)}</strong></span></div>
+          <div class="inv-pct-row"><span class="inv-pct-dot" style="background:var(--expense)"></span><span>Gastos: <strong>${pctGasto.toFixed(1)}%</strong></span></div>
+          <div class="inv-pct-row"><span class="inv-pct-dot" style="background:var(--bg3)"></span><span>Restante: <strong>${pctRest.toFixed(1)}%</strong></span></div>
+          <div class="inv-pct-row"><span class="inv-pct-dot" style="background:var(--accent)"></span><span>Meta recomendada: <strong>20%</strong></span></div>
+        </div>
+      </div>
+      <div class="inv-pct-bar-wrap">
+        <div class="inv-pct-bar">
+          <div class="inv-pct-bar-fill expense" style="width:${Math.min(pctGasto,100)}%"></div>
+          <div class="inv-pct-bar-fill invest" style="width:${Math.min(pctInv, Math.max(0, 100 - Math.min(pctGasto,100)))}%"></div>
+        </div>
+        <div class="inv-pct-bar-labels"><span>Gastos</span><span>Inversión</span></div>
+      </div>
+      <div class="inv-pct-msg" style="color:${statusColor}"><i class="fas ${pctInv >= recPct ? 'fa-circle-check' : pctInv >= 10 ? 'fa-circle-exclamation' : 'fa-triangle-exclamation'}"></i> ${statusMsg}</div>
+    `;
   }
 
   // Alertas
@@ -380,10 +420,25 @@ function renderInversiones() {
     return;
   }
   list.innerHTML = APP.investments.map(inv => {
-    const roi = calcInvROI(inv).toFixed(2);
-    const roiColor = roi >= 0 ? 'var(--income)' : 'var(--expense)';
+    const roiVal = calcInvROI(inv).toFixed(2);
+    const roiColor = roiVal >= 0 ? 'var(--income)' : 'var(--expense)';
+    const movs = (inv.movements || []).sort((a, b) => b.date.localeCompare(a.date));
+    const movHtml = movs.length > 0 ? `
+      <div class="inv-movs-list">
+        ${movs.map(m => `
+          <div class="inv-mov-row">
+            <span class="inv-mov-dir ${m.direction}">${m.direction === 'aporte' ? '▲ Aporte' : m.direction === 'retiro' ? '▼ Retiro' : '↑ Rendimiento'}</span>
+            <span class="inv-mov-amount">${fmtCOP(m.amount)}</span>
+            <span class="inv-mov-date">${fmtDate(m.date)}</span>
+            ${m.notes ? `<span class="inv-mov-notes">${m.notes}</span>` : ''}
+            <div class="inv-mov-actions">
+              <button class="tx-btn" onclick="openEditInvMovement('${inv.id}','${m.id}')" title="Editar movimiento"><i class="fas fa-pencil"></i></button>
+              <button class="tx-btn delete" onclick="doDeleteInvMovement('${inv.id}','${m.id}')" title="Eliminar movimiento"><i class="fas fa-trash"></i></button>
+            </div>
+          </div>`).join('')}
+      </div>` : '';
     return `
-      <div class="tx-item">
+      <div class="tx-item inv-expandable">
         <div class="tx-icon inversion"><i class="fas ${getCategoryIcon(inv.type)}"></i></div>
         <div class="tx-info">
           <div class="tx-desc">${inv.name}</div>
@@ -392,12 +447,14 @@ function renderInversiones() {
             <span>${fmtDate(inv.date)}</span>
             ${inv.businessName ? `<span>📦 ${inv.businessName}</span>` : ''}
           </div>
+          ${movHtml}
         </div>
         <div class="tx-right">
           <div class="tx-amount inversion">${fmtCOP(inv.currentValue || inv.initialAmount)}</div>
-          <div class="tx-date" style="color:${roiColor}">ROI: ${roi}%</div>
+          <div class="tx-date" style="color:${roiColor}">ROI: ${roiVal}%</div>
         </div>
         <div class="tx-actions">
+          <button class="tx-btn" onclick="openEditInv('${inv.id}')" title="Editar inversión"><i class="fas fa-pencil"></i></button>
           <button class="tx-btn" onclick="openInvMovement('${inv.id}')" title="Registrar movimiento"><i class="fas fa-plus"></i></button>
           <button class="tx-btn delete" onclick="deleteInv('${inv.id}')" title="Eliminar"><i class="fas fa-trash"></i></button>
         </div>
@@ -477,6 +534,7 @@ function renderAhorros() {
           <div class="goal-actions">
             <button class="btn-primary" style="padding:6px 10px;font-size:0.78rem;" onclick="quickSavingAction('${goal.id}', 'deposito')"><i class="fas fa-plus"></i> Depositar</button>
             <button class="btn-secondary" style="padding:6px 10px;font-size:0.78rem;" onclick="quickSavingAction('${goal.id}', 'retiro')"><i class="fas fa-minus"></i> Retirar</button>
+            <button class="tx-btn" onclick="openEditGoal('${goal.id}')" title="Editar meta"><i class="fas fa-pencil"></i></button>
             <button class="tx-btn delete" onclick="deleteGoal('${goal.id}')"><i class="fas fa-trash"></i></button>
           </div>
         </div>`;
@@ -500,6 +558,10 @@ function renderAhorros() {
           <div class="tx-amount ahorro" style="color:${m.direction === 'deposito' ? 'var(--saving)' : 'var(--expense)'}">${m.direction === 'deposito' ? '+' : '-'}${fmtCOP(m.amount)}</div>
           <div class="tx-date">${fmtDate(m.date)}</div>
         </div>
+        <div class="tx-actions">
+          <button class="tx-btn" onclick="openEditSavingMov('${m.id}')" title="Editar"><i class="fas fa-pencil"></i></button>
+          <button class="tx-btn delete" onclick="doDeleteSavingMov('${m.id}')" title="Eliminar"><i class="fas fa-trash"></i></button>
+        </div>
       </div>`).join('');
   }
 }
@@ -519,6 +581,189 @@ function deleteGoal(id) {
   showConfirm('Eliminar meta', '¿Seguro que quieres eliminar esta meta de ahorro?', () => {
     deleteSavingGoal(id);
     showToast('Meta eliminada', 'success');
+    refreshAll();
+  });
+}
+
+// =============================================
+// EDITAR INVERSIÓN
+// =============================================
+
+function openEditInv(invId) {
+  const inv = APP.investments.find(i => i.id === invId);
+  if (!inv) return;
+  const invTypes = [
+    ['acciones','Acciones'],['fondo_inv','Fondo de inversión'],['crypto','Criptomonedas'],
+    ['cdt','CDT'],['finca_raiz','Finca raíz'],['negocio','Negocio propio'],['otro_inv','Otro']
+  ];
+  document.getElementById('add-modal-title').textContent = 'Editar inversión';
+  document.getElementById('add-modal-body').innerHTML = `
+    <div class="form-group"><label>Nombre</label><input type="text" id="f-inv-name" value="${inv.name}" /></div>
+    <div class="form-group"><label>Tipo</label>
+      <select id="f-inv-type">${invTypes.map(([v,l]) => `<option value="${v}"${inv.type===v?' selected':''}>${l}</option>`).join('')}</select>
+    </div>
+    <div class="form-group"><label>Nombre empresa / plataforma</label><input type="text" id="f-inv-biz" value="${inv.businessName || ''}" /></div>
+    <div class="form-group"><label>Monto inicial (COP)</label><input type="number" id="f-inv-amount" value="${inv.initialAmount}" min="0" /></div>
+    <div class="form-group"><label>Fecha</label><input type="date" id="f-inv-date" value="${inv.date}" /></div>
+    <div class="form-group"><label>Notas</label><textarea id="f-inv-notes">${inv.notes || ''}</textarea></div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeAddModal()">Cancelar</button>
+      <button class="btn-primary" onclick="doEditInv('${invId}')"><i class="fas fa-check"></i> Guardar</button>
+    </div>`;
+  document.getElementById('add-modal').classList.remove('hidden');
+}
+
+function doEditInv(invId) {
+  const name = document.getElementById('f-inv-name')?.value?.trim();
+  const type = document.getElementById('f-inv-type')?.value;
+  const businessName = document.getElementById('f-inv-biz')?.value?.trim();
+  const initialAmount = parseFloat(document.getElementById('f-inv-amount')?.value);
+  const date = document.getElementById('f-inv-date')?.value;
+  const notes = document.getElementById('f-inv-notes')?.value;
+  if (!name) { showToast('Ingresa un nombre', 'error'); return; }
+  editInvestment(invId, { name, type, businessName, initialAmount, date, notes });
+  showToast('Inversión actualizada ✓', 'success');
+  closeAddModal();
+  refreshAll();
+}
+
+// =============================================
+// EDITAR MOVIMIENTO DE INVERSIÓN
+// =============================================
+
+function openEditInvMovement(invId, movId) {
+  const inv = APP.investments.find(i => i.id === invId);
+  if (!inv) return;
+  const mov = (inv.movements || []).find(m => m.id === movId);
+  if (!mov) return;
+  document.getElementById('add-modal-title').textContent = `Editar movimiento: ${inv.name}`;
+  document.getElementById('add-modal-body').innerHTML = `
+    <div class="type-tabs">
+      <button class="type-tab${mov.direction==='aporte'?' active':''}" onclick="setInvMovType('aporte', this)">Aporte</button>
+      <button class="type-tab${mov.direction==='retiro'?' active':''}" onclick="setInvMovType('retiro', this)">Retiro</button>
+      <button class="type-tab${mov.direction==='rendimiento'?' active':''}" onclick="setInvMovType('rendimiento', this)">Rendimiento</button>
+    </div>
+    <div class="form-group"><label>Monto (COP)</label><input type="number" id="f-amount" value="${mov.amount}" min="0" class="amount-big" /></div>
+    <div class="form-group"><label>Fecha</label><input type="date" id="f-date" value="${mov.date}" /></div>
+    <div class="form-group"><label>Notas</label><textarea id="f-notes">${mov.notes || ''}</textarea></div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeAddModal()">Cancelar</button>
+      <button class="btn-primary" onclick="doEditInvMovement('${invId}','${movId}')"><i class="fas fa-check"></i> Guardar</button>
+    </div>`;
+  invMovType = mov.direction;
+  document.getElementById('add-modal').classList.remove('hidden');
+}
+
+function doEditInvMovement(invId, movId) {
+  const amount = parseFloat(document.getElementById('f-amount')?.value);
+  const date = document.getElementById('f-date')?.value;
+  const notes = document.getElementById('f-notes')?.value;
+  if (!amount || amount <= 0) { showToast('Ingresa un monto válido', 'error'); return; }
+  editInvestmentMovement(invId, movId, { direction: invMovType, amount, date, notes });
+  showToast('Movimiento actualizado ✓', 'success');
+  closeAddModal();
+  refreshAll();
+}
+
+function doDeleteInvMovement(invId, movId) {
+  showConfirm('Eliminar movimiento', '¿Eliminar este movimiento de inversión?', () => {
+    deleteInvestmentMovement(invId, movId);
+    showToast('Movimiento eliminado', 'success');
+    refreshAll();
+  });
+}
+
+// =============================================
+// EDITAR META DE AHORRO
+// =============================================
+
+function openEditGoal(goalId) {
+  const goal = APP.savingGoals.find(g => g.id === goalId);
+  if (!goal) return;
+  const goalTypes = [
+    ['proyecto_ahorro','Proyecto'],['inmueble_ahorro','Inmueble'],['estudio','Estudio'],
+    ['emergencia','Emergencia'],['viaje_ahorro','Viaje'],['otro_ahorro','Otro']
+  ];
+  const priorities = [['alta','Alta'],['media','Media'],['baja','Baja']];
+  document.getElementById('add-modal-title').textContent = 'Editar meta de ahorro';
+  document.getElementById('add-modal-body').innerHTML = `
+    <div class="form-group"><label>Nombre</label><input type="text" id="f-goal-name" value="${goal.name}" /></div>
+    <div class="form-group"><label>Tipo</label>
+      <select id="f-goal-type">${goalTypes.map(([v,l]) => `<option value="${v}"${goal.type===v?' selected':''}>${l}</option>`).join('')}</select>
+    </div>
+    <div class="form-group"><label>Meta (COP)</label><input type="number" id="f-goal-target" value="${goal.targetAmount || ''}" min="0" /></div>
+    <div class="form-group"><label>Fecha objetivo</label><input type="date" id="f-goal-date" value="${goal.targetDate || ''}" /></div>
+    <div class="form-group"><label>Prioridad</label>
+      <select id="f-goal-priority">${priorities.map(([v,l]) => `<option value="${v}"${goal.priority===v?' selected':''}>${l}</option>`).join('')}</select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeAddModal()">Cancelar</button>
+      <button class="btn-primary" onclick="doEditGoal('${goalId}')"><i class="fas fa-check"></i> Guardar</button>
+    </div>`;
+  document.getElementById('add-modal').classList.remove('hidden');
+}
+
+function doEditGoal(goalId) {
+  const name = document.getElementById('f-goal-name')?.value?.trim();
+  const type = document.getElementById('f-goal-type')?.value;
+  const targetAmount = parseFloat(document.getElementById('f-goal-target')?.value) || 0;
+  const targetDate = document.getElementById('f-goal-date')?.value || '';
+  const priority = document.getElementById('f-goal-priority')?.value;
+  if (!name) { showToast('Ingresa un nombre', 'error'); return; }
+  editSavingGoal(goalId, { name, type, targetAmount, targetDate, priority });
+  showToast('Meta actualizada ✓', 'success');
+  closeAddModal();
+  refreshAll();
+}
+
+// =============================================
+// EDITAR MOVIMIENTO DE AHORRO
+// =============================================
+
+function openEditSavingMov(movId) {
+  const mov = APP.savingMovements.find(m => m.id === movId);
+  if (!mov) return;
+  const goalOptions = APP.savingGoals.map(g => `<option value="${g.id}"${g.id===mov.goalId?' selected':''}>${g.name}</option>`).join('');
+  document.getElementById('add-modal-title').textContent = 'Editar movimiento de ahorro';
+  document.getElementById('add-modal-body').innerHTML = `
+    <div class="type-tabs">
+      <button class="type-tab${mov.direction==='deposito'?' active':''}" onclick="setAhorroMovEditType('deposito', this)">Depósito</button>
+      <button class="type-tab${mov.direction==='retiro'?' active':''}" onclick="setAhorroMovEditType('retiro', this)">Retiro</button>
+    </div>
+    <div class="form-group"><label>Meta de ahorro</label><select id="f-sav-goal">${goalOptions}</select></div>
+    <div class="form-group"><label>Monto (COP)</label><input type="number" id="f-sav-amount" value="${mov.amount}" min="0" class="amount-big" /></div>
+    <div class="form-group"><label>Fecha</label><input type="date" id="f-sav-date" value="${mov.date}" /></div>
+    <div class="form-group"><label>Notas</label><textarea id="f-sav-notes">${mov.notes || ''}</textarea></div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeAddModal()">Cancelar</button>
+      <button class="btn-primary" onclick="doEditSavingMov('${movId}')"><i class="fas fa-check"></i> Guardar</button>
+    </div>`;
+  savMovEditType = mov.direction;
+  document.getElementById('add-modal').classList.remove('hidden');
+}
+
+let savMovEditType = 'deposito';
+function setAhorroMovEditType(dir, btn) {
+  savMovEditType = dir;
+  document.querySelectorAll('.type-tab').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
+function doEditSavingMov(movId) {
+  const amount = parseFloat(document.getElementById('f-sav-amount')?.value);
+  const date = document.getElementById('f-sav-date')?.value;
+  const notes = document.getElementById('f-sav-notes')?.value;
+  if (!amount || amount <= 0) { showToast('Ingresa un monto válido', 'error'); return; }
+  editSavingMovement(movId, { direction: savMovEditType, amount, date, notes });
+  showToast('Movimiento actualizado ✓', 'success');
+  closeAddModal();
+  refreshAll();
+}
+
+function doDeleteSavingMov(movId) {
+  showConfirm('Eliminar movimiento', '¿Eliminar este movimiento de ahorro?', () => {
+    deleteSavingMovement(movId);
+    showToast('Movimiento eliminado', 'success');
     refreshAll();
   });
 }
@@ -901,6 +1146,9 @@ function renderPerfil() {
     p.hasCreditCard ? '💳 Tarjeta crédito' : ''
   ].filter(Boolean);
 
+  const col = COLOMBIA;
+  const updatedLabel = col.mes ? col.mes : (col.fuente || 'Referencia');
+
   document.getElementById('profile-info-display').innerHTML = `
     <div class="profile-name">${p.name || 'Sin nombre'}</div>
     <div class="profile-occ">${p.occupation || '—'} · ${{ empleado: 'Empleado', independiente: 'Independiente', mixto: 'Mixto', desempleado: 'Desempleado', pensionado: 'Pensionado', estudiante: 'Estudiante' }[p.workType] || p.workType}</div>
@@ -909,16 +1157,84 @@ function renderPerfil() {
       Salario: <strong>${p.monthlySalary > 0 ? fmtCOP(p.monthlySalary) : 'No declarado'}</strong> · 
       Sustenta a: <strong>${p.peopleSupport} persona(s)</strong> · 
       Convive con: <strong>${p.peopleAtHome} persona(s)</strong>
+    </div>
+    <div style="margin-top:14px;">
+      <button class="btn-primary" style="padding:8px 16px;font-size:0.85rem;" onclick="openEditPerfil()">
+        <i class="fas fa-user-pen"></i> Editar perfil
+      </button>
     </div>`;
 
   document.getElementById('indicators-table').innerHTML = `
-    <div class="ind-row"><span class="ind-row-label">Salario mínimo 2026</span><span class="ind-row-val">${fmtCOP(COLOMBIA.salarioMinimo)}</span></div>
-    <div class="ind-row"><span class="ind-row-label">Auxilio de transporte 2026</span><span class="ind-row-val">${fmtCOP(COLOMBIA.auxilioTransporte)}</span></div>
-    <div class="ind-row"><span class="ind-row-label">Salario vital 2026</span><span class="ind-row-val">${fmtCOP(COLOMBIA.salarioVital)}</span></div>
-    <div class="ind-row"><span class="ind-row-label">Inflación anual (IPC mar 2026)</span><span class="ind-row-val" style="color:var(--warning)">${COLOMBIA.inflacionAnual}%</span></div>
-    <div class="ind-row"><span class="ind-row-label">Inflación mensual (mar 2026)</span><span class="ind-row-val">${COLOMBIA.inflacionMensual}%</span></div>
-    <div class="ind-row"><span class="ind-row-label">Interés bancario corriente (abr 2026)</span><span class="ind-row-val">${COLOMBIA.interesBC}% E.A.</span></div>
-    <div class="ind-row"><span class="ind-row-label">Tasa de usura (abr 2026)</span><span class="ind-row-val" style="color:var(--danger)">${COLOMBIA.tasaUsura}% E.A.</span></div>
-    <div class="ind-row"><span class="ind-row-label">Mejor CDT disponible (abr 2026)</span><span class="ind-row-val" style="color:var(--income)">${COLOMBIA.mejorCDT}% E.A.</span></div>
-    <div class="ind-row" style="font-size:0.75rem;"><span class="ind-row-label" style="color:var(--text3)">Fuente: DANE / Superfinanciera Colombia</span><span class="ind-row-val" style="color:var(--text3)">Abr 2026</span></div>`;
+    <div class="ind-row"><span class="ind-row-label">Salario mínimo</span><span class="ind-row-val">${fmtCOP(col.salarioMinimo)}</span></div>
+    <div class="ind-row"><span class="ind-row-label">Auxilio de transporte</span><span class="ind-row-val">${fmtCOP(col.auxilioTransporte)}</span></div>
+    <div class="ind-row"><span class="ind-row-label">Salario vital</span><span class="ind-row-val">${fmtCOP(col.salarioVital)}</span></div>
+    <div class="ind-row"><span class="ind-row-label">Inflación anual (IPC)</span><span class="ind-row-val" style="color:var(--warning)">${col.inflacionAnual}%</span></div>
+    <div class="ind-row"><span class="ind-row-label">Inflación mensual</span><span class="ind-row-val">${col.inflacionMensual}%</span></div>
+    <div class="ind-row"><span class="ind-row-label">Interés bancario corriente</span><span class="ind-row-val">${col.interesBC}% E.A.</span></div>
+    <div class="ind-row"><span class="ind-row-label">Tasa de usura</span><span class="ind-row-val" style="color:var(--danger)">${col.tasaUsura}% E.A.</span></div>
+    <div class="ind-row"><span class="ind-row-label">Mejor CDT disponible</span><span class="ind-row-val" style="color:var(--income)">${col.mejorCDT}% E.A.</span></div>
+    <div class="ind-row" style="font-size:0.75rem;justify-content:space-between;align-items:center;">
+      <span style="color:var(--text3)">📅 ${updatedLabel} · DANE / Superfinanciera</span>
+      <button class="tx-btn" id="btn-update-indicators" onclick="forceUpdateIndicators()" title="Actualizar indicadores ahora" style="font-size:0.72rem;padding:4px 8px;">
+        <i class="fas fa-rotate"></i> Actualizar
+      </button>
+    </div>`;
+}
+
+async function forceUpdateIndicators() {
+  const btn = document.getElementById('btn-update-indicators');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando...'; }
+  showToast('Consultando indicadores actualizados...', 'info');
+  const ok = await updateColombiaIndicators(true);
+  if (ok) {
+    showToast('Indicadores actualizados ✓', 'success');
+    renderPerfil();
+  } else {
+    showToast('No se pudieron actualizar. Revisa tu conexión.', 'error');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-rotate"></i> Actualizar'; }
+  }
+}
+
+function openEditPerfil() {
+  const p = APP.profile;
+  document.getElementById('edit-perfil-name').value = p.name || '';
+  document.getElementById('edit-perfil-occupation').value = p.occupation || '';
+  document.getElementById('edit-perfil-worktype').value = p.workType || 'empleado';
+  document.getElementById('edit-perfil-city').value = p.city || '';
+  document.getElementById('edit-perfil-salary').value = p.monthlySalary || 0;
+  document.getElementById('edit-perfil-people-home').value = p.peopleAtHome || 0;
+  document.getElementById('edit-perfil-people-support').value = p.peopleSupport || 0;
+  document.getElementById('edit-perfil-housing').value = p.housing || 'arriendo';
+  document.getElementById('edit-perfil-partner').checked = !!p.hasPartner;
+  document.getElementById('edit-perfil-children').checked = !!p.hasChildren;
+  document.getElementById('edit-perfil-pets').checked = !!p.hasPets;
+  document.getElementById('edit-perfil-modal').classList.remove('hidden');
+}
+
+// =============================================
+// GUARDAR / CERRAR MODAL EDITAR PERFIL
+// =============================================
+
+function closeEditPerfil() {
+  document.getElementById('edit-perfil-modal').classList.add('hidden');
+}
+
+function saveEditPerfil() {
+  const p = APP.profile;
+  p.name = document.getElementById('edit-perfil-name')?.value?.trim() || p.name;
+  p.occupation = document.getElementById('edit-perfil-occupation')?.value?.trim() || p.occupation;
+  p.workType = document.getElementById('edit-perfil-worktype')?.value || p.workType;
+  p.city = document.getElementById('edit-perfil-city')?.value?.trim() || p.city;
+  p.monthlySalary = parseFloat(document.getElementById('edit-perfil-salary')?.value) || p.monthlySalary;
+  p.peopleAtHome = parseInt(document.getElementById('edit-perfil-people-home')?.value) || 0;
+  p.peopleSupport = parseInt(document.getElementById('edit-perfil-people-support')?.value) || 0;
+  p.housing = document.getElementById('edit-perfil-housing')?.value || p.housing;
+  p.hasPartner = document.getElementById('edit-perfil-partner')?.checked || false;
+  p.hasChildren = document.getElementById('edit-perfil-children')?.checked || false;
+  p.hasPets = document.getElementById('edit-perfil-pets')?.checked || false;
+  saveDataCloud();
+  closeEditPerfil();
+  updateNavUser();
+  renderPerfil();
+  showToast('Perfil actualizado ✓', 'success');
 }

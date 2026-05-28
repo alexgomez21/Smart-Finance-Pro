@@ -49,6 +49,7 @@ const TIPOS_GASTO = [
   { id: 'servicios', label: 'Servicios públicos/privados', icon: 'fa-bolt' },
   { id: 'hogar', label: 'Hogar', icon: 'fa-home' },
   { id: 'alimentacion', label: 'Alimentación', icon: 'fa-utensils' },
+  { id: 'mercado', label: 'Mercado', icon: 'fa-cart-shopping' },
   { id: 'reparacion', label: 'Reparación / Mantenimiento', icon: 'fa-wrench' },
   { id: 'aseo_hogar', label: 'Aseo hogar', icon: 'fa-broom' },
   { id: 'gusticos', label: 'Gusticos / Antojos', icon: 'fa-candy-cane', isRisk: true },
@@ -213,6 +214,7 @@ function loadData() {
 function resetApp() {
   if (confirm('¿Seguro que quieres borrar TODOS tus datos? Esta acción no se puede deshacer.')) {
     localStorage.removeItem('sfp_data');
+    localStorage.setItem('sfp_no_demo', '1');
     location.reload();
   }
 }

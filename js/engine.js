@@ -93,10 +93,15 @@ function addSavingMovement(movData) {
   if (!goal) return null;
 
   const amount = parseFloat(movData.amount) || 0;
+  let actualAmount = amount;
+
   if (movData.direction === 'deposito') {
     goal.balance = (goal.balance || 0) + amount;
   } else {
-    goal.balance = Math.max(0, (goal.balance || 0) - amount);
+    // Solo retirar lo que realmente hay en la meta
+    const prevBalance = goal.balance || 0;
+    goal.balance = Math.max(0, prevBalance - amount);
+    actualAmount = prevBalance - goal.balance; // monto real retirado
   }
 
   const mov = {
@@ -104,7 +109,7 @@ function addSavingMovement(movData) {
     goalId: movData.goalId,
     goalName: goal.name,
     direction: movData.direction,
-    amount,
+    amount: actualAmount,
     date: movData.date || todayStr(),
     notes: movData.notes || '',
     source: movData.source || 'saldo',
@@ -540,4 +545,184 @@ function generateComparisons() {
   }
 
   return comparisons;
+}
+
+// =============================================
+// EDICIÓN - INVERSIONES Y AHORROS
+// =============================================
+
+function editInvestment(id, newData) {
+  const inv = APP.investments.find(i => i.id === id);
+  if (!inv) return;
+  inv.name = newData.name || inv.name;
+  inv.type = newData.type || inv.type;
+  inv.businessName = newData.businessName !== undefined ? newData.businessName : inv.businessName;
+  inv.date = newData.date || inv.date;
+  inv.notes = newData.notes !== undefined ? newData.notes : inv.notes;
+  if (newData.initialAmount !== undefined) {
+    const diff = parseFloat(newData.initialAmount) - inv.initialAmount;
+    inv.initialAmount = parseFloat(newData.initialAmount);
+    inv.currentValue = (inv.currentValue || 0) + diff;
+  }
+  saveDataCloud();
+}
+
+function editInvestmentMovement(invId, movId, newData) {
+  const inv = APP.investments.find(i => i.id === invId);
+  if (!inv || !inv.movements) return;
+  const mov = inv.movements.find(m => m.id === movId);
+  if (!mov) return;
+
+  // Revertir efecto anterior
+  const oldAmount = mov.amount;
+  const oldDir = mov.direction;
+  if (oldDir === 'aporte') inv.currentValue -= oldAmount;
+  else if (oldDir === 'retiro') inv.currentValue += oldAmount;
+  else if (oldDir === 'rendimiento') inv.currentValue -= oldAmount;
+
+  // Aplicar nuevo efecto
+  mov.direction = newData.direction || mov.direction;
+  mov.amount = parseFloat(newData.amount) || mov.amount;
+  mov.date = newData.date || mov.date;
+  mov.notes = newData.notes !== undefined ? newData.notes : mov.notes;
+
+  if (mov.direction === 'aporte') inv.currentValue += mov.amount;
+  else if (mov.direction === 'retiro') inv.currentValue = Math.max(0, inv.currentValue - mov.amount);
+  else if (mov.direction === 'rendimiento') inv.currentValue += mov.amount;
+
+  saveDataCloud();
+}
+
+function deleteInvestmentMovement(invId, movId) {
+  const inv = APP.investments.find(i => i.id === invId);
+  if (!inv || !inv.movements) return;
+  const mov = inv.movements.find(m => m.id === movId);
+  if (!mov) return;
+
+  // Revertir efecto
+  if (mov.direction === 'aporte') inv.currentValue = Math.max(0, inv.currentValue - mov.amount);
+  else if (mov.direction === 'retiro') inv.currentValue += mov.amount;
+  else if (mov.direction === 'rendimiento') inv.currentValue = Math.max(0, inv.currentValue - mov.amount);
+
+  inv.movements = inv.movements.filter(m => m.id !== movId);
+  saveDataCloud();
+}
+
+function editSavingGoal(id, newData) {
+  const goal = APP.savingGoals.find(g => g.id === id);
+  if (!goal) return;
+  goal.name = newData.name || goal.name;
+  goal.type = newData.type || goal.type;
+  goal.targetAmount = parseFloat(newData.targetAmount) || goal.targetAmount;
+  goal.targetDate = newData.targetDate !== undefined ? newData.targetDate : goal.targetDate;
+  goal.priority = newData.priority || goal.priority;
+  // Actualizar nombre en movimientos
+  APP.savingMovements.filter(m => m.goalId === id).forEach(m => m.goalName = goal.name);
+  saveDataCloud();
+}
+
+function editSavingMovement(movId, newData) {
+  const mov = APP.savingMovements.find(m => m.id === movId);
+  if (!mov) return;
+  const goal = APP.savingGoals.find(g => g.id === mov.goalId);
+
+  // Revertir efecto anterior en balance
+  if (goal) {
+    if (mov.direction === 'deposito') goal.balance = Math.max(0, (goal.balance || 0) - mov.amount);
+    else goal.balance = (goal.balance || 0) + mov.amount;
+  }
+
+  mov.direction = newData.direction || mov.direction;
+  mov.amount = parseFloat(newData.amount) || mov.amount;
+  mov.date = newData.date || mov.date;
+  mov.notes = newData.notes !== undefined ? newData.notes : mov.notes;
+
+  // Aplicar nuevo efecto
+  if (goal) {
+    if (mov.direction === 'deposito') goal.balance = (goal.balance || 0) + mov.amount;
+    else goal.balance = Math.max(0, (goal.balance || 0) - mov.amount);
+  }
+
+  saveDataCloud();
+}
+
+function deleteSavingMovement(movId) {
+  const mov = APP.savingMovements.find(m => m.id === movId);
+  if (!mov) return;
+  const goal = APP.savingGoals.find(g => g.id === mov.goalId);
+  if (goal) {
+    if (mov.direction === 'deposito') goal.balance = Math.max(0, (goal.balance || 0) - mov.amount);
+    else goal.balance = (goal.balance || 0) + mov.amount;
+  }
+  APP.savingMovements = APP.savingMovements.filter(m => m.id !== movId);
+  saveDataCloud();
+}
+
+// =============================================
+// AUTO-ACTUALIZACIÓN INDICADORES COLOMBIA (mensual via AI)
+// =============================================
+
+async function updateColombiaIndicators(force = false) {
+  const stored = APP.economicRef || {};
+  const updatedAt = stored.updatedAt || '';
+  const now = new Date();
+  const currentYM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+
+  // Solo actualizar si es un mes nuevo o si se fuerza
+  if (!force && updatedAt && updatedAt.startsWith(currentYM)) return;
+
+  const monthNames = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const mes = monthNames[now.getMonth()];
+  const año = now.getFullYear();
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 400,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        messages: [{
+          role: 'user',
+          content: `Busca los indicadores económicos de Colombia para ${mes} ${año}. Responde SOLO en JSON válido sin backticks, con exactamente estas claves numéricas:
+{"salarioMinimo":number,"auxilioTransporte":number,"inflacionAnual":number,"inflacionMensual":number,"interesBC":number,"tasaUsura":number,"mejorCDT":number,"mes":"${mes} ${año}"}
+Fuentes: DANE, Superfinanciera, Banco de la República Colombia. Si no hay dato actualizado para este mes, usa el más reciente disponible.`
+        }]
+      })
+    });
+
+    const data = await response.json();
+    const text = data.content?.filter(b => b.type === 'text').map(b => b.text).join('') || '';
+    const clean = text.replace(/```json|```/g, '').trim();
+    const jsonMatch = clean.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No JSON found');
+    const newData = JSON.parse(jsonMatch[0]);
+
+    // Validar que tiene los campos esperados
+    if (!newData.salarioMinimo || !newData.inflacionAnual) throw new Error('Datos incompletos');
+
+    APP.economicRef = {
+      salarioMinimo: newData.salarioMinimo || COLOMBIA.salarioMinimo,
+      auxilioTransporte: newData.auxilioTransporte || COLOMBIA.auxilioTransporte,
+      salarioVital: newData.salarioMinimo + (newData.auxilioTransporte || 0),
+      inflacionAnual: newData.inflacionAnual || COLOMBIA.inflacionAnual,
+      inflacionMensual: newData.inflacionMensual || COLOMBIA.inflacionMensual,
+      interesBC: newData.interesBC || COLOMBIA.interesBC,
+      tasaUsura: newData.tasaUsura || COLOMBIA.tasaUsura,
+      mejorCDT: newData.mejorCDT || COLOMBIA.mejorCDT,
+      referenciaCDT: { min: 9, max: newData.mejorCDT || COLOMBIA.mejorCDT },
+      año,
+      mes: newData.mes || `${mes} ${año}`,
+      fuente: 'DANE/Superfinanciera Colombia',
+      updatedAt: currentYM + '-01'
+    };
+    // Actualizar también el objeto COLOMBIA en memoria
+    Object.assign(COLOMBIA, APP.economicRef);
+    saveDataCloud();
+    return true;
+  } catch(e) {
+    console.warn('No se pudieron actualizar indicadores:', e.message);
+    return false;
+  }
 }
