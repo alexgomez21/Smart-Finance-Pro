@@ -27,6 +27,11 @@ function startApp() {
   // Cargar datos demo si la app está vacía
   loadDemoData();
 
+  // Cargar indicadores guardados en APP (si existen)
+  if (APP.economicRef && APP.economicRef.salarioMinimo) {
+    Object.assign(COLOMBIA, APP.economicRef);
+  }
+
   // Aplicar tema guardado
   const body = document.getElementById('app-body');
   body.className = APP.theme === 'light' ? 'light-theme' : 'dark-theme';
@@ -43,6 +48,9 @@ function startApp() {
   document.getElementById('main-app').classList.remove('hidden');
   updateNavUser();
   navTo('dashboard');
+
+  // Actualizar indicadores Colombia si es un mes nuevo (en background)
+  setTimeout(() => updateColombiaIndicators(false), 3000);
 }
 
 // =============================================
@@ -204,9 +212,12 @@ function updateNavUser() {
   if (occEl) occEl.textContent = APP.profile.occupation || APP.profile.workType || '—';
   const navAvatar = document.getElementById('nav-user-avatar');
   if (navAvatar) {
-    const photoURL = APP.profile.photoURL || (typeof getCurrentUser==='function' && getCurrentUser() ? getCurrentUser().photoURL : null);
-    navAvatar.innerHTML = photoURL
-      ? `<img src="${photoURL}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />`
+    // Priorizar foto local guardada, luego foto de Google
+    const localPhoto = APP.profile.photo;
+    const googlePhoto = APP.profile.photoURL || (typeof getCurrentUser==='function' && getCurrentUser() ? getCurrentUser().photoURL : null);
+    const photoSrc = localPhoto || googlePhoto;
+    navAvatar.innerHTML = photoSrc
+      ? `<img src="${photoSrc}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />`
       : `<i class="fas fa-user-circle" style="font-size:2rem;color:var(--accent)"></i>`;
   }
 }
@@ -265,18 +276,40 @@ function renderDashboard() {
   const saldoEl = document.getElementById('dash-saldo');
   saldoEl.style.color = saldo < 0 ? 'var(--expense)' : 'var(--income)';
 
-  // Comparaciones
-  const comps = generateComparisons();
-  const compList = document.getElementById('comparison-list');
-  if (comps.length === 0) {
-    compList.innerHTML = '<div class="empty-state"><i class="fas fa-chart-pie"></i><p>Registra más datos para ver comparaciones</p></div>';
-  } else {
-    compList.innerHTML = comps.map(c => `
-      <div class="comparison-item">
-        <div class="comp-icon">${c.icon}</div>
-        <div class="comp-text">${c.text}</div>
-        <div class="comp-status ${c.status}">${c.label}</div>
-      </div>`).join('');
+  // Resumen de inversión mensual (alerta + consejos)
+  const invWidget = document.getElementById('inv-pct-widget');
+  if (invWidget) {
+    const pctInv = ingresos > 0 ? (inversiones / ingresos) * 100 : 0;
+    const falta = ingresos > 0 ? Math.max(0, ingresos * 0.20 - inversiones) : 0;
+
+    let icon, alertClass, titulo, consejo;
+    if (ingresos === 0) {
+      icon = 'fa-circle-info'; alertClass = 'inv-alert-neutral';
+      titulo = 'Sin ingresos registrados este mes';
+      consejo = 'Registra tus ingresos para ver tu porcentaje de inversión y recibir consejos personalizados.';
+    } else if (pctInv >= 20) {
+      icon = 'fa-circle-check'; alertClass = 'inv-alert-ok';
+      titulo = `Inviertes el ${pctInv.toFixed(1)}% de tus ingresos — ¡Excelente!`;
+      consejo = `Estás por encima de la regla del 20%. Llevas ${fmtCOP(inversiones)} invertidos este mes. Considera diversificar: CDT, bolsa de valores o finca raíz.`;
+    } else if (pctInv >= 10) {
+      icon = 'fa-circle-exclamation'; alertClass = 'inv-alert-warn';
+      titulo = `Inviertes el ${pctInv.toFixed(1)}% de tus ingresos — Bien, pero puedes mejorar`;
+      consejo = `Te faltan ${fmtCOP(falta)} para llegar al 20% recomendado. Intenta reducir gastos variables para alcanzarlo.`;
+    } else if (pctInv > 0) {
+      icon = 'fa-triangle-exclamation'; alertClass = 'inv-alert-bad';
+      titulo = `Solo inviertes el ${pctInv.toFixed(1)}% de tus ingresos`;
+      consejo = `La regla del 20% recomienda invertir ${fmtCOP(ingresos * 0.20)} al mes. Actualmente inviertes ${fmtCOP(inversiones)}. Un pequeño ajuste en gastos puede marcar la diferencia.`;
+    } else {
+      icon = 'fa-triangle-exclamation'; alertClass = 'inv-alert-bad';
+      titulo = 'No tienes inversiones este mes';
+      consejo = `Con tus ingresos de ${fmtCOP(ingresos)}, podrías invertir ${fmtCOP(ingresos * 0.20)} (20%). Empieza con un CDT o fondo de inversión aunque sea con poco.`;
+    }
+
+    invWidget.innerHTML = `
+      <div class="inv-alert ${alertClass}">
+        <div class="inv-alert-header"><i class="fas ${icon}"></i><strong>${titulo}</strong></div>
+        <p class="inv-alert-tip">${consejo}</p>
+      </div>`;
   }
 
   // Alertas
@@ -380,10 +413,25 @@ function renderInversiones() {
     return;
   }
   list.innerHTML = APP.investments.map(inv => {
-    const roi = calcInvROI(inv).toFixed(2);
-    const roiColor = roi >= 0 ? 'var(--income)' : 'var(--expense)';
+    const roiVal = calcInvROI(inv).toFixed(2);
+    const roiColor = roiVal >= 0 ? 'var(--income)' : 'var(--expense)';
+    const movs = (inv.movements || []).sort((a, b) => b.date.localeCompare(a.date));
+    const movHtml = movs.length > 0 ? `
+      <div class="inv-movs-list">
+        ${movs.map(m => `
+          <div class="inv-mov-row">
+            <span class="inv-mov-dir ${m.direction}">${m.direction === 'aporte' ? '▲ Aporte' : m.direction === 'retiro' ? '▼ Retiro' : '↑ Rendimiento'}</span>
+            <span class="inv-mov-amount">${fmtCOP(m.amount)}</span>
+            <span class="inv-mov-date">${fmtDate(m.date)}</span>
+            ${m.notes ? `<span class="inv-mov-notes">${m.notes}</span>` : ''}
+            <div class="inv-mov-actions">
+              <button class="tx-btn" onclick="openEditInvMovement('${inv.id}','${m.id}')" title="Editar movimiento"><i class="fas fa-pencil"></i></button>
+              <button class="tx-btn delete" onclick="doDeleteInvMovement('${inv.id}','${m.id}')" title="Eliminar movimiento"><i class="fas fa-trash"></i></button>
+            </div>
+          </div>`).join('')}
+      </div>` : '';
     return `
-      <div class="tx-item">
+      <div class="tx-item inv-expandable">
         <div class="tx-icon inversion"><i class="fas ${getCategoryIcon(inv.type)}"></i></div>
         <div class="tx-info">
           <div class="tx-desc">${inv.name}</div>
@@ -392,12 +440,14 @@ function renderInversiones() {
             <span>${fmtDate(inv.date)}</span>
             ${inv.businessName ? `<span>📦 ${inv.businessName}</span>` : ''}
           </div>
+          ${movHtml}
         </div>
         <div class="tx-right">
           <div class="tx-amount inversion">${fmtCOP(inv.currentValue || inv.initialAmount)}</div>
-          <div class="tx-date" style="color:${roiColor}">ROI: ${roi}%</div>
+          <div class="tx-date" style="color:${roiColor}">ROI: ${roiVal}%</div>
         </div>
         <div class="tx-actions">
+          <button class="tx-btn" onclick="openEditInv('${inv.id}')" title="Editar inversión"><i class="fas fa-pencil"></i></button>
           <button class="tx-btn" onclick="openInvMovement('${inv.id}')" title="Registrar movimiento"><i class="fas fa-plus"></i></button>
           <button class="tx-btn delete" onclick="deleteInv('${inv.id}')" title="Eliminar"><i class="fas fa-trash"></i></button>
         </div>
@@ -477,6 +527,7 @@ function renderAhorros() {
           <div class="goal-actions">
             <button class="btn-primary" style="padding:6px 10px;font-size:0.78rem;" onclick="quickSavingAction('${goal.id}', 'deposito')"><i class="fas fa-plus"></i> Depositar</button>
             <button class="btn-secondary" style="padding:6px 10px;font-size:0.78rem;" onclick="quickSavingAction('${goal.id}', 'retiro')"><i class="fas fa-minus"></i> Retirar</button>
+            <button class="tx-btn" onclick="openEditGoal('${goal.id}')" title="Editar meta"><i class="fas fa-pencil"></i></button>
             <button class="tx-btn delete" onclick="deleteGoal('${goal.id}')"><i class="fas fa-trash"></i></button>
           </div>
         </div>`;
@@ -500,6 +551,10 @@ function renderAhorros() {
           <div class="tx-amount ahorro" style="color:${m.direction === 'deposito' ? 'var(--saving)' : 'var(--expense)'}">${m.direction === 'deposito' ? '+' : '-'}${fmtCOP(m.amount)}</div>
           <div class="tx-date">${fmtDate(m.date)}</div>
         </div>
+        <div class="tx-actions">
+          <button class="tx-btn" onclick="openEditSavingMov('${m.id}')" title="Editar"><i class="fas fa-pencil"></i></button>
+          <button class="tx-btn delete" onclick="doDeleteSavingMov('${m.id}')" title="Eliminar"><i class="fas fa-trash"></i></button>
+        </div>
       </div>`).join('');
   }
 }
@@ -519,6 +574,189 @@ function deleteGoal(id) {
   showConfirm('Eliminar meta', '¿Seguro que quieres eliminar esta meta de ahorro?', () => {
     deleteSavingGoal(id);
     showToast('Meta eliminada', 'success');
+    refreshAll();
+  });
+}
+
+// =============================================
+// EDITAR INVERSIÓN
+// =============================================
+
+function openEditInv(invId) {
+  const inv = APP.investments.find(i => i.id === invId);
+  if (!inv) return;
+  const invTypes = [
+    ['acciones','Acciones'],['fondo_inv','Fondo de inversión'],['crypto','Criptomonedas'],
+    ['cdt','CDT'],['finca_raiz','Finca raíz'],['negocio','Negocio propio'],['otro_inv','Otro']
+  ];
+  document.getElementById('add-modal-title').textContent = 'Editar inversión';
+  document.getElementById('add-modal-body').innerHTML = `
+    <div class="form-group"><label>Nombre</label><input type="text" id="f-inv-name" value="${inv.name}" /></div>
+    <div class="form-group"><label>Tipo</label>
+      <select id="f-inv-type">${invTypes.map(([v,l]) => `<option value="${v}"${inv.type===v?' selected':''}>${l}</option>`).join('')}</select>
+    </div>
+    <div class="form-group"><label>Nombre empresa / plataforma</label><input type="text" id="f-inv-biz" value="${inv.businessName || ''}" /></div>
+    <div class="form-group"><label>Monto inicial (COP)</label><input type="number" id="f-inv-amount" value="${inv.initialAmount}" min="0" /></div>
+    <div class="form-group"><label>Fecha</label><input type="date" id="f-inv-date" value="${inv.date}" /></div>
+    <div class="form-group"><label>Notas</label><textarea id="f-inv-notes">${inv.notes || ''}</textarea></div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeAddModal()">Cancelar</button>
+      <button class="btn-primary" onclick="doEditInv('${invId}')"><i class="fas fa-check"></i> Guardar</button>
+    </div>`;
+  document.getElementById('add-modal').classList.remove('hidden');
+}
+
+function doEditInv(invId) {
+  const name = document.getElementById('f-inv-name')?.value?.trim();
+  const type = document.getElementById('f-inv-type')?.value;
+  const businessName = document.getElementById('f-inv-biz')?.value?.trim();
+  const initialAmount = parseFloat(document.getElementById('f-inv-amount')?.value);
+  const date = document.getElementById('f-inv-date')?.value;
+  const notes = document.getElementById('f-inv-notes')?.value;
+  if (!name) { showToast('Ingresa un nombre', 'error'); return; }
+  editInvestment(invId, { name, type, businessName, initialAmount, date, notes });
+  showToast('Inversión actualizada ✓', 'success');
+  closeAddModal();
+  refreshAll();
+}
+
+// =============================================
+// EDITAR MOVIMIENTO DE INVERSIÓN
+// =============================================
+
+function openEditInvMovement(invId, movId) {
+  const inv = APP.investments.find(i => i.id === invId);
+  if (!inv) return;
+  const mov = (inv.movements || []).find(m => m.id === movId);
+  if (!mov) return;
+  document.getElementById('add-modal-title').textContent = `Editar movimiento: ${inv.name}`;
+  document.getElementById('add-modal-body').innerHTML = `
+    <div class="type-tabs">
+      <button class="type-tab${mov.direction==='aporte'?' active':''}" onclick="setInvMovType('aporte', this)">Aporte</button>
+      <button class="type-tab${mov.direction==='retiro'?' active':''}" onclick="setInvMovType('retiro', this)">Retiro</button>
+      <button class="type-tab${mov.direction==='rendimiento'?' active':''}" onclick="setInvMovType('rendimiento', this)">Rendimiento</button>
+    </div>
+    <div class="form-group"><label>Monto (COP)</label><input type="number" id="f-amount" value="${mov.amount}" min="0" class="amount-big" /></div>
+    <div class="form-group"><label>Fecha</label><input type="date" id="f-date" value="${mov.date}" /></div>
+    <div class="form-group"><label>Notas</label><textarea id="f-notes">${mov.notes || ''}</textarea></div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeAddModal()">Cancelar</button>
+      <button class="btn-primary" onclick="doEditInvMovement('${invId}','${movId}')"><i class="fas fa-check"></i> Guardar</button>
+    </div>`;
+  invMovType = mov.direction;
+  document.getElementById('add-modal').classList.remove('hidden');
+}
+
+function doEditInvMovement(invId, movId) {
+  const amount = parseFloat(document.getElementById('f-amount')?.value);
+  const date = document.getElementById('f-date')?.value;
+  const notes = document.getElementById('f-notes')?.value;
+  if (!amount || amount <= 0) { showToast('Ingresa un monto válido', 'error'); return; }
+  editInvestmentMovement(invId, movId, { direction: invMovType, amount, date, notes });
+  showToast('Movimiento actualizado ✓', 'success');
+  closeAddModal();
+  refreshAll();
+}
+
+function doDeleteInvMovement(invId, movId) {
+  showConfirm('Eliminar movimiento', '¿Eliminar este movimiento de inversión?', () => {
+    deleteInvestmentMovement(invId, movId);
+    showToast('Movimiento eliminado', 'success');
+    refreshAll();
+  });
+}
+
+// =============================================
+// EDITAR META DE AHORRO
+// =============================================
+
+function openEditGoal(goalId) {
+  const goal = APP.savingGoals.find(g => g.id === goalId);
+  if (!goal) return;
+  const goalTypes = [
+    ['proyecto_ahorro','Proyecto'],['inmueble_ahorro','Inmueble'],['estudio','Estudio'],
+    ['emergencia','Emergencia'],['viaje_ahorro','Viaje'],['otro_ahorro','Otro']
+  ];
+  const priorities = [['alta','Alta'],['media','Media'],['baja','Baja']];
+  document.getElementById('add-modal-title').textContent = 'Editar meta de ahorro';
+  document.getElementById('add-modal-body').innerHTML = `
+    <div class="form-group"><label>Nombre</label><input type="text" id="f-goal-name" value="${goal.name}" /></div>
+    <div class="form-group"><label>Tipo</label>
+      <select id="f-goal-type">${goalTypes.map(([v,l]) => `<option value="${v}"${goal.type===v?' selected':''}>${l}</option>`).join('')}</select>
+    </div>
+    <div class="form-group"><label>Meta (COP)</label><input type="number" id="f-goal-target" value="${goal.targetAmount || ''}" min="0" /></div>
+    <div class="form-group"><label>Fecha objetivo</label><input type="date" id="f-goal-date" value="${goal.targetDate || ''}" /></div>
+    <div class="form-group"><label>Prioridad</label>
+      <select id="f-goal-priority">${priorities.map(([v,l]) => `<option value="${v}"${goal.priority===v?' selected':''}>${l}</option>`).join('')}</select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeAddModal()">Cancelar</button>
+      <button class="btn-primary" onclick="doEditGoal('${goalId}')"><i class="fas fa-check"></i> Guardar</button>
+    </div>`;
+  document.getElementById('add-modal').classList.remove('hidden');
+}
+
+function doEditGoal(goalId) {
+  const name = document.getElementById('f-goal-name')?.value?.trim();
+  const type = document.getElementById('f-goal-type')?.value;
+  const targetAmount = parseFloat(document.getElementById('f-goal-target')?.value) || 0;
+  const targetDate = document.getElementById('f-goal-date')?.value || '';
+  const priority = document.getElementById('f-goal-priority')?.value;
+  if (!name) { showToast('Ingresa un nombre', 'error'); return; }
+  editSavingGoal(goalId, { name, type, targetAmount, targetDate, priority });
+  showToast('Meta actualizada ✓', 'success');
+  closeAddModal();
+  refreshAll();
+}
+
+// =============================================
+// EDITAR MOVIMIENTO DE AHORRO
+// =============================================
+
+function openEditSavingMov(movId) {
+  const mov = APP.savingMovements.find(m => m.id === movId);
+  if (!mov) return;
+  const goalOptions = APP.savingGoals.map(g => `<option value="${g.id}"${g.id===mov.goalId?' selected':''}>${g.name}</option>`).join('');
+  document.getElementById('add-modal-title').textContent = 'Editar movimiento de ahorro';
+  document.getElementById('add-modal-body').innerHTML = `
+    <div class="type-tabs">
+      <button class="type-tab${mov.direction==='deposito'?' active':''}" onclick="setAhorroMovEditType('deposito', this)">Depósito</button>
+      <button class="type-tab${mov.direction==='retiro'?' active':''}" onclick="setAhorroMovEditType('retiro', this)">Retiro</button>
+    </div>
+    <div class="form-group"><label>Meta de ahorro</label><select id="f-sav-goal">${goalOptions}</select></div>
+    <div class="form-group"><label>Monto (COP)</label><input type="number" id="f-sav-amount" value="${mov.amount}" min="0" class="amount-big" /></div>
+    <div class="form-group"><label>Fecha</label><input type="date" id="f-sav-date" value="${mov.date}" /></div>
+    <div class="form-group"><label>Notas</label><textarea id="f-sav-notes">${mov.notes || ''}</textarea></div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeAddModal()">Cancelar</button>
+      <button class="btn-primary" onclick="doEditSavingMov('${movId}')"><i class="fas fa-check"></i> Guardar</button>
+    </div>`;
+  savMovEditType = mov.direction;
+  document.getElementById('add-modal').classList.remove('hidden');
+}
+
+let savMovEditType = 'deposito';
+function setAhorroMovEditType(dir, btn) {
+  savMovEditType = dir;
+  document.querySelectorAll('.type-tab').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
+function doEditSavingMov(movId) {
+  const amount = parseFloat(document.getElementById('f-sav-amount')?.value);
+  const date = document.getElementById('f-sav-date')?.value;
+  const notes = document.getElementById('f-sav-notes')?.value;
+  if (!amount || amount <= 0) { showToast('Ingresa un monto válido', 'error'); return; }
+  editSavingMovement(movId, { direction: savMovEditType, amount, date, notes });
+  showToast('Movimiento actualizado ✓', 'success');
+  closeAddModal();
+  refreshAll();
+}
+
+function doDeleteSavingMov(movId) {
+  showConfirm('Eliminar movimiento', '¿Eliminar este movimiento de ahorro?', () => {
+    deleteSavingMovement(movId);
+    showToast('Movimiento eliminado', 'success');
     refreshAll();
   });
 }
@@ -790,7 +1028,7 @@ function renderComparacion() {
     ${msgBalance}`;
 }
 
-function runIAAnalysis() {
+async function runIAAnalysis() {
   const btn = document.querySelector('#rs-ia .btn-primary');
   const loading = document.getElementById('ia-loading');
   const result = document.getElementById('ia-result');
@@ -798,132 +1036,61 @@ function runIAAnalysis() {
   loading.classList.remove('hidden');
   result.innerHTML = '';
 
-  // Simular tiempo de análisis
-  setTimeout(() => {
-    const gastos = getTxPeriodo('gasto');
-    const ingresos = getTxPeriodo('ingreso');
-    const totalGastos = gastos.reduce((s,t)=>s+t.amount,0);
-    const totalIngresos = ingresos.reduce((s,t)=>s+t.amount,0);
-    const balance = totalIngresos - totalGastos;
-    const totalDeuda = calcTotalDeuda();
-    const totalAhorros = calcTotalAhorros();
-    const saldo = getCurrentSaldo();
-    const p = APP.profile;
-    const periodo = reportPeriod==='mes'?'este mes':reportPeriod==='trimestre'?'este trimestre':'este año';
-    const SMMLV = 1750905;
+  const gastos = getTxPeriodo('gasto');
+  const ingresos = getTxPeriodo('ingreso');
+  const totalGastos = gastos.reduce((s,t)=>s+t.amount,0);
+  const totalIngresos = ingresos.reduce((s,t)=>s+t.amount,0);
+  const balance = totalIngresos - totalGastos;
+  const freq = {};
+  gastos.forEach(tx => { freq[tx.category]=(freq[tx.category]||0)+tx.amount; });
+  const topCats = Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,5)
+    .map(([cat,amt])=>`${(TIPOS_GASTO.find(t=>t.id===cat)||{label:cat}).label}: ${fmtCOP(amt)}`).join(', ');
 
-    // Agrupar gastos por categoría
-    const freq = {}, freqCount = {};
-    gastos.forEach(tx => {
-      freq[tx.category] = (freq[tx.category]||0) + tx.amount;
-      freqCount[tx.category] = (freqCount[tx.category]||0) + 1;
+  const p = APP.profile;
+  const periodo = reportPeriod==='mes'?'Este mes':reportPeriod==='trimestre'?'Últimos 3 meses':'Este año';
+  const prompt = `Eres un asesor financiero experto en finanzas personales para Colombia. Analiza esta información y da consejos prácticos y personalizados. Responde en español con secciones claras.
+
+PERFIL: ${p.name||'Usuario'}, ${p.occupation||''}, ${p.city||'Colombia'}, trabajo: ${p.workType||'empleado'}
+PERIODO: ${periodo}
+INGRESOS: ${fmtCOP(totalIngresos)}
+GASTOS: ${fmtCOP(totalGastos)}
+BALANCE: ${fmtCOP(balance)}
+RATIO GASTO/INGRESO: ${totalIngresos>0?(totalGastos/totalIngresos*100).toFixed(1):'N/A'}%
+TOP GASTOS POR CATEGORÍA: ${topCats||'Sin datos'}
+DEUDAS ACTIVAS: ${fmtCOP(calcTotalDeuda())}
+AHORROS: ${fmtCOP(calcTotalAhorros())}
+SALDO DISPONIBLE: ${fmtCOP(getCurrentSaldo())}
+SALARIO MÍNIMO 2026: $1.750.905 | INFLACIÓN: 5.56% | TASA USURA: 26.76% E.A.
+
+Responde con estas secciones:
+### 📊 Diagnóstico general
+### ⚠️ Alertas
+### 💡 Top 3 recomendaciones
+### 🎯 Meta para el próximo mes`;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
     });
-    const topCats = Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,3);
-    const catLabel = id => (TIPOS_GASTO.find(t=>t.id===id)||{label:id}).label;
-    const ratioGasto = totalIngresos > 0 ? (totalGastos/totalIngresos*100) : 0;
-    const gastosMalos = gastos.filter(t=>t.category==='gastos_malos').reduce((s,t)=>s+t.amount,0);
-    const gastosAzar = gastos.filter(t=>t.category==='azar_gasto').reduce((s,t)=>s+t.amount,0);
-    const gastosEntret = gastos.filter(t=>t.category==='entretenimiento'||t.category==='gusticos').reduce((s,t)=>s+t.amount,0);
-    const tieneDeuda = totalDeuda > 0;
-    const salariosSMMLV = totalIngresos / SMMLV;
-
-    // ---- DIAGNÓSTICO ----
-    let diagnostico = '';
-    if (totalIngresos === 0) {
-      diagnostico = `No registraste ingresos ${periodo}. Sin datos de ingresos no es posible hacer un análisis completo. Te recomendamos registrar todos tus ingresos para obtener un diagnóstico preciso.`;
-    } else if (ratioGasto > 100) {
-      diagnostico = `${p.name||'Usuario'}, ${periodo} tus gastos superaron tus ingresos — gastaste <strong>${fmtCOP(totalGastos)}</strong> teniendo ingresos de <strong>${fmtCOP(totalIngresos)}</strong>. Esto generó un déficit de <strong style="color:var(--expense)">${fmtCOP(Math.abs(balance))}</strong>. Es urgente revisar y reducir gastos.`;
-    } else if (ratioGasto > 80) {
-      diagnostico = `${p.name||'Usuario'}, ${periodo} usaste el <strong>${ratioGasto.toFixed(1)}%</strong> de tus ingresos en gastos. Solo te quedó disponible <strong>${fmtCOP(balance)}</strong> de <strong>${fmtCOP(totalIngresos)}</strong>. Estás en zona de alerta — lo ideal es no superar el 70% en gastos.`;
-    } else if (ratioGasto > 60) {
-      diagnostico = `${p.name||'Usuario'}, ${periodo} tus finanzas están en equilibrio. Gastaste el <strong>${ratioGasto.toFixed(1)}%</strong> de tus ingresos y te quedó un balance positivo de <strong style="color:var(--income)">${fmtCOP(balance)}</strong>. Hay espacio para mejorar el ahorro.`;
-    } else {
-      diagnostico = `¡Excelente, ${p.name||'Usuario'}! ${periodo} tuviste un muy buen control financiero. Gastaste solo el <strong>${ratioGasto.toFixed(1)}%</strong> de tus ingresos y mantuviste un balance saludable de <strong style="color:var(--income)">${fmtCOP(balance)}</strong>.`;
-    }
-
-    // ---- ALERTAS ----
-    const alertas = [];
-    if (ratioGasto > 90) alertas.push('🔴 <strong>Gasto crítico:</strong> Estás gastando más de lo que ganas. Debes reducir gastos de inmediato.');
-    if (gastosMalos > 0) alertas.push(`🔴 <strong>Gastos malos:</strong> Registraste ${fmtCOP(gastosMalos)} en gastos perjudiciales. Evalúa si puedes eliminarlos.`);
-    if (gastosAzar > totalIngresos * 0.05) alertas.push(`⚠️ <strong>Juegos de azar:</strong> Gastaste ${fmtCOP(gastosAzar)} en apuestas (${(gastosAzar/totalIngresos*100).toFixed(1)}% de tus ingresos). Esto es dinero que no regresa.`);
-    if (tieneDeuda && totalDeuda > totalIngresos * 2) alertas.push(`⚠️ <strong>Deuda alta:</strong> Tu deuda total de ${fmtCOP(totalDeuda)} equivale a más de 2 meses de ingresos. Prioriza pagarla.`);
-    if (totalAhorros === 0) alertas.push('⚠️ <strong>Sin ahorros:</strong> No tienes metas de ahorro activas. Un fondo de emergencia es esencial.');
-    if (gastosEntret > totalIngresos * 0.15) alertas.push(`⚠️ <strong>Entretenimiento alto:</strong> Gastaste ${fmtCOP(gastosEntret)} en gustos/entretenimiento (${(gastosEntret/totalIngresos*100).toFixed(1)}% de ingresos).`);
-    if (saldo < 0) alertas.push('🔴 <strong>Saldo negativo:</strong> Tu saldo disponible está en negativo. Revisa tus movimientos.');
-    if (alertas.length === 0) alertas.push('✅ <strong>Sin alertas críticas</strong> — tus finanzas lucen saludables este periodo.');
-
-    // ---- RECOMENDACIONES ----
-    const recos = [];
-    if (ratioGasto > 70) {
-      recos.push(`<strong>Aplica la regla 50/30/20:</strong> Destina máximo el 50% de tus ingresos (${fmtCOP(totalIngresos*0.5)}) a necesidades, 30% (${fmtCOP(totalIngresos*0.3)}) a gustos y 20% (${fmtCOP(totalIngresos*0.2)}) a ahorro e inversión.`);
-    } else {
-      recos.push(`<strong>Incrementa tu ahorro:</strong> Con tu balance de ${fmtCOP(balance)}, podrías ahorrar al menos ${fmtCOP(balance*0.5)} este periodo. Considera abrir un CDT o bolsillo de alto rendimiento.`);
-    }
-    if (topCats.length > 0) {
-      recos.push(`<strong>Revisa tu mayor gasto:</strong> "${catLabel(topCats[0][0])}" con ${fmtCOP(topCats[0][1])} es donde más gastas. ¿Puedes reducirlo un 10%? Eso serían ${fmtCOP(topCats[0][1]*0.1)} al mes.`);
-    }
-    if (tieneDeuda) {
-      recos.push(`<strong>Ataca tu deuda:</strong> Tienes ${fmtCOP(totalDeuda)} en deudas. Con la inflación al 5.56%, cada mes que pasa te cuesta más. Destina al menos ${fmtCOP(Math.min(balance*0.3, totalDeuda*0.1))} extra a pagar deuda.`);
-    } else if (totalAhorros === 0) {
-      recos.push(`<strong>Crea tu fondo de emergencia:</strong> Lo ideal es tener 3 meses de gastos ahorrados (${fmtCOP(totalGastos*3)}). Empieza con pequeñas metas en la sección de Ahorros.`);
-    } else {
-      recos.push(`<strong>Considera invertir:</strong> Con la mejor tasa CDT en Colombia al 19.3% E.A., si inviertes ${fmtCOP(balance*0.3)} podrías ganar aprox. ${fmtCOP(balance*0.3*0.193/12)} mensuales en rendimientos.`);
-    }
-
-    // ---- META ----
-    let meta = '';
-    if (totalIngresos === 0) {
-      meta = 'Registra al menos un ingreso en la app para que puedas ver tu análisis completo el próximo periodo.';
-    } else if (ratioGasto > 90) {
-      meta = `Reducir tus gastos en al menos <strong>${fmtCOP(totalGastos*0.1)}</strong> el próximo mes. Identifica 3 gastos prescindibles y elimínalos.`;
-    } else if (totalAhorros === 0) {
-      meta = `Crear tu primera meta de ahorro de al menos <strong>${fmtCOP(Math.max(balance*0.2, 50000))}</strong>. Ve a la sección Ahorros y crea tu fondo de emergencia.`;
-    } else {
-      meta = `Mantener tu ratio de gastos por debajo del <strong>${Math.max(ratioGasto-5, 50).toFixed(0)}%</strong> y aumentar tus ahorros en <strong>${fmtCOP(balance*0.2)}</strong>.`;
-    }
-
-    // ---- RENDER ----
-    const html = `
-      <div class="ia-result-block">
-        <h3>📊 Diagnóstico general</h3>
-        <p>${diagnostico}</p>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0;">
-          <div style="background:var(--bg3);border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:0.75rem;color:var(--text3);">Ingresos</div>
-            <div style="font-weight:800;color:var(--income);">${fmtCOP(totalIngresos)}</div>
-          </div>
-          <div style="background:var(--bg3);border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:0.75rem;color:var(--text3);">Gastos</div>
-            <div style="font-weight:800;color:var(--expense);">${fmtCOP(totalGastos)}</div>
-          </div>
-          <div style="background:var(--bg3);border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:0.75rem;color:var(--text3);">Balance</div>
-            <div style="font-weight:800;color:${balance>=0?'var(--income)':'var(--expense)'};">${fmtCOP(balance)}</div>
-          </div>
-          <div style="background:var(--bg3);border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:0.75rem;color:var(--text3);">% Gastado</div>
-            <div style="font-weight:800;color:${ratioGasto>80?'var(--expense)':ratioGasto>60?'var(--warning)':'var(--income)'};">${ratioGasto.toFixed(1)}%</div>
-          </div>
-        </div>
-
-        <h3>⚠️ Alertas</h3>
-        <ul>${alertas.map(a=>`<li>${a}</li>`).join('')}</ul>
-
-        <h3>💡 Top 3 recomendaciones</h3>
-        <ul>${recos.map(r=>`<li>${r}</li>`).join('')}</ul>
-
-        <h3>🎯 Meta para el próximo mes</h3>
-        <p>${meta}</p>
-
-        <div style="margin-top:14px;padding:10px;background:var(--bg3);border-radius:8px;font-size:0.75rem;color:var(--text3);text-align:center;">
-          Análisis basado en tus datos reales · Indicadores Colombia 2026
-        </div>
-      </div>`;
-
-    result.innerHTML = html;
-    loading.classList.add('hidden');
-    if (btn) btn.disabled = false;
-  }, 1200);
+    const data = await resp.json();
+    const text = (data.content||[]).map(c=>c.text||'').join('') || 'Sin respuesta';
+    const html = text
+      .replace(/### (.+)/g, '<h3>$1</h3>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/^- (.+)/gm, '<li>$1</li>')
+      .replace(/\n\n/g, '<br/><br/>');
+    result.innerHTML = `<div class="ia-result-block">${html}</div>`;
+  } catch(e) {
+    result.innerHTML = `<div class="analysis-block" style="color:var(--expense);">❌ Error al conectar con la IA. Revisa tu conexión.</div>`;
+  }
+  loading.classList.add('hidden');
+  if (btn) btn.disabled = false;
 }
 
 
@@ -972,6 +1139,9 @@ function renderPerfil() {
     p.hasCreditCard ? '💳 Tarjeta crédito' : ''
   ].filter(Boolean);
 
+  const col = COLOMBIA;
+  const updatedLabel = col.mes ? col.mes : (col.fuente || 'Referencia');
+
   document.getElementById('profile-info-display').innerHTML = `
     <div class="profile-name">${p.name || 'Sin nombre'}</div>
     <div class="profile-occ">${p.occupation || '—'} · ${{ empleado: 'Empleado', independiente: 'Independiente', mixto: 'Mixto', desempleado: 'Desempleado', pensionado: 'Pensionado', estudiante: 'Estudiante' }[p.workType] || p.workType}</div>
@@ -980,16 +1150,133 @@ function renderPerfil() {
       Salario: <strong>${p.monthlySalary > 0 ? fmtCOP(p.monthlySalary) : 'No declarado'}</strong> · 
       Sustenta a: <strong>${p.peopleSupport} persona(s)</strong> · 
       Convive con: <strong>${p.peopleAtHome} persona(s)</strong>
+    </div>
+    <div style="margin-top:14px;">
+      <button class="btn-primary" style="padding:8px 16px;font-size:0.85rem;" onclick="openEditPerfil()">
+        <i class="fas fa-user-pen"></i> Editar perfil
+      </button>
     </div>`;
 
+  // Mostrar foto de perfil si existe
+  const avatarEl = document.querySelector('.profile-avatar');
+  if (avatarEl) {
+    if (p.photo) {
+      avatarEl.style.backgroundImage = `url(${p.photo})`;
+      avatarEl.style.backgroundSize = 'cover';
+      avatarEl.style.backgroundPosition = 'center';
+      avatarEl.innerHTML = '';
+    } else {
+      avatarEl.style.backgroundImage = 'none';
+      avatarEl.innerHTML = '<i class="fas fa-user"></i>';
+    }
+  }
+
+  // Canasta familiar estimada según personas en casa
+  const peopleHome = APP.profile.peopleAtHome || 1;
+  const canastaBase = 1286609; // DANE 2026 por persona
+  const canasta = Math.round(canastaBase * peopleHome);
+
   document.getElementById('indicators-table').innerHTML = `
-    <div class="ind-row"><span class="ind-row-label">Salario mínimo 2026</span><span class="ind-row-val">${fmtCOP(COLOMBIA.salarioMinimo)}</span></div>
-    <div class="ind-row"><span class="ind-row-label">Auxilio de transporte 2026</span><span class="ind-row-val">${fmtCOP(COLOMBIA.auxilioTransporte)}</span></div>
-    <div class="ind-row"><span class="ind-row-label">Salario vital 2026</span><span class="ind-row-val">${fmtCOP(COLOMBIA.salarioVital)}</span></div>
-    <div class="ind-row"><span class="ind-row-label">Inflación anual (IPC mar 2026)</span><span class="ind-row-val" style="color:var(--warning)">${COLOMBIA.inflacionAnual}%</span></div>
-    <div class="ind-row"><span class="ind-row-label">Inflación mensual (mar 2026)</span><span class="ind-row-val">${COLOMBIA.inflacionMensual}%</span></div>
-    <div class="ind-row"><span class="ind-row-label">Interés bancario corriente (abr 2026)</span><span class="ind-row-val">${COLOMBIA.interesBC}% E.A.</span></div>
-    <div class="ind-row"><span class="ind-row-label">Tasa de usura (abr 2026)</span><span class="ind-row-val" style="color:var(--danger)">${COLOMBIA.tasaUsura}% E.A.</span></div>
-    <div class="ind-row"><span class="ind-row-label">Mejor CDT disponible (abr 2026)</span><span class="ind-row-val" style="color:var(--income)">${COLOMBIA.mejorCDT}% E.A.</span></div>
-    <div class="ind-row" style="font-size:0.75rem;"><span class="ind-row-label" style="color:var(--text3)">Fuente: DANE / Superfinanciera Colombia</span><span class="ind-row-val" style="color:var(--text3)">Abr 2026</span></div>`;
+    <div class="ind-row"><span class="ind-row-label">Salario mínimo</span><span class="ind-row-val">${fmtCOP(col.salarioMinimo)}</span></div>
+    <div class="ind-row" style="background:var(--bg3);border-radius:6px;padding:6px 8px;">
+      <span class="ind-row-label">🛒 Canasta familiar (${peopleHome} persona${peopleHome>1?'s':''})</span>
+      <span class="ind-row-val" style="color:var(--accent)">${fmtCOP(canasta)}</span>
+    </div>
+    <div class="ind-row"><span class="ind-row-label">Auxilio de transporte</span><span class="ind-row-val">${fmtCOP(col.auxilioTransporte)}</span></div>
+    <div class="ind-row"><span class="ind-row-label">Salario vital</span><span class="ind-row-val">${fmtCOP(col.salarioVital)}</span></div>
+    <div class="ind-row"><span class="ind-row-label">Inflación anual (IPC)</span><span class="ind-row-val" style="color:var(--warning)">${col.inflacionAnual}%</span></div>
+    <div class="ind-row"><span class="ind-row-label">Inflación mensual</span><span class="ind-row-val">${col.inflacionMensual}%</span></div>
+    <div class="ind-row"><span class="ind-row-label">Interés bancario corriente</span><span class="ind-row-val">${col.interesBC}% E.A.</span></div>
+    <div class="ind-row"><span class="ind-row-label">Tasa de usura</span><span class="ind-row-val" style="color:var(--danger)">${col.tasaUsura}% E.A.</span></div>
+    <div class="ind-row"><span class="ind-row-label">Mejor CDT disponible</span><span class="ind-row-val" style="color:var(--income)">${col.mejorCDT}% E.A.</span></div>
+    <div class="ind-row" style="font-size:0.75rem;justify-content:space-between;align-items:center;">
+      <span style="color:var(--text3)">📅 ${updatedLabel} · DANE / Superfinanciera</span>
+      <button class="tx-btn" id="btn-update-indicators" onclick="forceUpdateIndicators()" title="Actualizar indicadores ahora" style="font-size:0.72rem;padding:4px 8px;">
+        <i class="fas fa-rotate"></i> Actualizar
+      </button>
+    </div>`;
+}
+
+async function forceUpdateIndicators() {
+  const btn = document.getElementById('btn-update-indicators');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando...'; }
+  showToast('Consultando indicadores actualizados...', 'info');
+  const ok = await updateColombiaIndicators(true);
+  if (ok) {
+    showToast('Indicadores actualizados ✓', 'success');
+    renderPerfil();
+  } else {
+    showToast('No se pudieron actualizar. Revisa tu conexión.', 'error');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-rotate"></i> Actualizar'; }
+  }
+}
+
+function openEditPerfil() {
+  const p = APP.profile;
+  // Mostrar foto actual en el modal
+  const previewEl = document.getElementById('edit-perfil-photo-preview');
+  if (previewEl) {
+    previewEl.style.backgroundImage = p.photo ? `url(${p.photo})` : 'none';
+    previewEl.innerHTML = p.photo ? '' : '<i class="fas fa-camera"></i>';
+  }
+  document.getElementById('edit-perfil-name').value = p.name || '';
+  document.getElementById('edit-perfil-occupation').value = p.occupation || '';
+  document.getElementById('edit-perfil-worktype').value = p.workType || 'empleado';
+  document.getElementById('edit-perfil-city').value = p.city || '';
+  document.getElementById('edit-perfil-salary').value = p.monthlySalary || 0;
+  document.getElementById('edit-perfil-people-home').value = p.peopleAtHome || 0;
+  document.getElementById('edit-perfil-people-support').value = p.peopleSupport || 0;
+  document.getElementById('edit-perfil-housing').value = p.housing || 'arriendo';
+  document.getElementById('edit-perfil-partner').checked = !!p.hasPartner;
+  document.getElementById('edit-perfil-children').checked = !!p.hasChildren;
+  document.getElementById('edit-perfil-pets').checked = !!p.hasPets;
+  document.getElementById('edit-perfil-modal').classList.remove('hidden');
+}
+
+// =============================================
+// GUARDAR / CERRAR MODAL EDITAR PERFIL
+// =============================================
+
+function closeEditPerfil() {
+  window._pendingProfilePhoto = null;
+  document.getElementById('edit-perfil-modal').classList.add('hidden');
+}
+
+function previewProfilePhoto(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  if (file.size > 2 * 1024 * 1024) { showToast('La foto debe pesar menos de 2MB', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    window._pendingProfilePhoto = e.target.result;
+    const preview = document.getElementById('edit-perfil-photo-preview');
+    if (preview) {
+      preview.style.backgroundImage = `url(${e.target.result})`;
+      preview.innerHTML = '';
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function saveEditPerfil() {
+  const p = APP.profile;
+  // Guardar foto si se seleccionó una nueva
+  const photoData = window._pendingProfilePhoto;
+  if (photoData) { p.photo = photoData; window._pendingProfilePhoto = null; }
+  p.name = document.getElementById('edit-perfil-name')?.value?.trim() || p.name;
+  p.occupation = document.getElementById('edit-perfil-occupation')?.value?.trim() || p.occupation;
+  p.workType = document.getElementById('edit-perfil-worktype')?.value || p.workType;
+  p.city = document.getElementById('edit-perfil-city')?.value?.trim() || p.city;
+  p.monthlySalary = parseFloat(document.getElementById('edit-perfil-salary')?.value) || p.monthlySalary;
+  p.peopleAtHome = parseInt(document.getElementById('edit-perfil-people-home')?.value) || 0;
+  p.peopleSupport = parseInt(document.getElementById('edit-perfil-people-support')?.value) || 0;
+  p.housing = document.getElementById('edit-perfil-housing')?.value || p.housing;
+  p.hasPartner = document.getElementById('edit-perfil-partner')?.checked || false;
+  p.hasChildren = document.getElementById('edit-perfil-children')?.checked || false;
+  p.hasPets = document.getElementById('edit-perfil-pets')?.checked || false;
+  saveDataCloud();
+  closeEditPerfil();
+  updateNavUser();
+  renderPerfil();
+  showToast('Perfil actualizado ✓', 'success');
 }

@@ -347,7 +347,7 @@
 
       <div class="user-info" id="sidebar-user">
         <div class="user-details">
-          <div id="nav-user-avatar" style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;background:var(--bg3);"><i class="fas fa-user-circle" style="font-size:2rem;color:var(--accent)"></i></div>
+          <div id="nav-user-avatar" style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;background:var(--bg3);background-size:cover;background-position:center;"><i class="fas fa-user-circle" style="font-size:2rem;color:var(--accent)"></i></div>
           <span class="user-name" id="nav-user-name">Usuario</span>
           <span class="user-occupation" id="nav-user-occ">—</span>
         </div>
@@ -860,6 +860,17 @@
         <button class="modal-close" onclick="closeEditPerfil()"><i class="fas fa-times"></i></button>
       </div>
       <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;">
+        <!-- Foto de perfil -->
+        <div style="display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:4px;">
+          <div id="edit-perfil-photo-preview" onclick="document.getElementById('edit-perfil-photo-input').click()"
+            style="width:80px;height:80px;border-radius:50%;background:var(--bg3);border:2px dashed var(--border);
+            display:flex;align-items:center;justify-content:center;cursor:pointer;
+            font-size:1.5rem;color:var(--text3);background-size:cover;background-position:center;overflow:hidden;">
+            <i class="fas fa-camera"></i>
+          </div>
+          <input type="file" id="edit-perfil-photo-input" accept="image/*" style="display:none" onchange="previewProfilePhoto(this)" />
+          <span style="font-size:0.75rem;color:var(--text3);">Toca para cambiar foto</span>
+        </div>
         <div class="form-group">
           <label class="form-label">Nombre *</label>
           <input id="edit-perfil-name" class="form-input" type="text" placeholder="Tu nombre" />
