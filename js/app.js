@@ -212,9 +212,12 @@ function updateNavUser() {
   if (occEl) occEl.textContent = APP.profile.occupation || APP.profile.workType || '—';
   const navAvatar = document.getElementById('nav-user-avatar');
   if (navAvatar) {
-    const photoURL = APP.profile.photoURL || (typeof getCurrentUser==='function' && getCurrentUser() ? getCurrentUser().photoURL : null);
-    navAvatar.innerHTML = photoURL
-      ? `<img src="${photoURL}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />`
+    // Priorizar foto local guardada, luego foto de Google
+    const localPhoto = APP.profile.photo;
+    const googlePhoto = APP.profile.photoURL || (typeof getCurrentUser==='function' && getCurrentUser() ? getCurrentUser().photoURL : null);
+    const photoSrc = localPhoto || googlePhoto;
+    navAvatar.innerHTML = photoSrc
+      ? `<img src="${photoSrc}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />`
       : `<i class="fas fa-user-circle" style="font-size:2rem;color:var(--accent)"></i>`;
   }
 }
@@ -273,50 +276,40 @@ function renderDashboard() {
   const saldoEl = document.getElementById('dash-saldo');
   saldoEl.style.color = saldo < 0 ? 'var(--expense)' : 'var(--income)';
 
-  // Porcentaje de inversión mensual
+  // Resumen de inversión mensual (alerta + consejos)
   const invWidget = document.getElementById('inv-pct-widget');
   if (invWidget) {
     const pctInv = ingresos > 0 ? (inversiones / ingresos) * 100 : 0;
-    const pctGasto = ingresos > 0 ? Math.min((gastos / ingresos) * 100, 100) : 0;
-    const pctRest = Math.max(0, 100 - pctInv - pctGasto);
-    const recPct = 20;
-    let statusColor = pctInv >= recPct ? 'var(--income)' : pctInv >= 10 ? 'var(--warning)' : 'var(--expense)';
-    let statusMsg = pctInv >= recPct ? '¡Excelente! Superas el 20% recomendado' :
-                    pctInv >= 10 ? 'Bien, pero puedes aumentar un poco más' :
-                    ingresos === 0 ? 'Registra ingresos para ver tu porcentaje' :
-                    'Intenta destinar al menos el 20% a inversión';
-    const circ = 2 * Math.PI * 42;
-    const dash = (pctInv / 100 * circ).toFixed(1);
+    const falta = ingresos > 0 ? Math.max(0, ingresos * 0.20 - inversiones) : 0;
+
+    let icon, alertClass, titulo, consejo;
+    if (ingresos === 0) {
+      icon = 'fa-circle-info'; alertClass = 'inv-alert-neutral';
+      titulo = 'Sin ingresos registrados este mes';
+      consejo = 'Registra tus ingresos para ver tu porcentaje de inversión y recibir consejos personalizados.';
+    } else if (pctInv >= 20) {
+      icon = 'fa-circle-check'; alertClass = 'inv-alert-ok';
+      titulo = `Inviertes el ${pctInv.toFixed(1)}% de tus ingresos — ¡Excelente!`;
+      consejo = `Estás por encima de la regla del 20%. Llevas ${fmtCOP(inversiones)} invertidos este mes. Considera diversificar: CDT, bolsa de valores o finca raíz.`;
+    } else if (pctInv >= 10) {
+      icon = 'fa-circle-exclamation'; alertClass = 'inv-alert-warn';
+      titulo = `Inviertes el ${pctInv.toFixed(1)}% de tus ingresos — Bien, pero puedes mejorar`;
+      consejo = `Te faltan ${fmtCOP(falta)} para llegar al 20% recomendado. Intenta reducir gastos variables para alcanzarlo.`;
+    } else if (pctInv > 0) {
+      icon = 'fa-triangle-exclamation'; alertClass = 'inv-alert-bad';
+      titulo = `Solo inviertes el ${pctInv.toFixed(1)}% de tus ingresos`;
+      consejo = `La regla del 20% recomienda invertir ${fmtCOP(ingresos * 0.20)} al mes. Actualmente inviertes ${fmtCOP(inversiones)}. Un pequeño ajuste en gastos puede marcar la diferencia.`;
+    } else {
+      icon = 'fa-triangle-exclamation'; alertClass = 'inv-alert-bad';
+      titulo = 'No tienes inversiones este mes';
+      consejo = `Con tus ingresos de ${fmtCOP(ingresos)}, podrías invertir ${fmtCOP(ingresos * 0.20)} (20%). Empieza con un CDT o fondo de inversión aunque sea con poco.`;
+    }
+
     invWidget.innerHTML = `
-      <div class="inv-pct-main">
-        <div class="inv-pct-circle-wrap">
-          <svg viewBox="0 0 100 100" class="inv-pct-svg">
-            <circle cx="50" cy="50" r="42" fill="none" stroke="var(--bg3)" stroke-width="10"/>
-            <circle cx="50" cy="50" r="42" fill="none" stroke="${statusColor}" stroke-width="10"
-              stroke-dasharray="${dash} ${circ.toFixed(1)}"
-              stroke-dashoffset="${(circ * 0.25).toFixed(1)}" stroke-linecap="round"/>
-          </svg>
-          <div class="inv-pct-label">
-            <span class="inv-pct-num" style="color:${statusColor}">${pctInv.toFixed(1)}%</span>
-            <span class="inv-pct-sub">invertido</span>
-          </div>
-        </div>
-        <div class="inv-pct-details">
-          <div class="inv-pct-row"><span class="inv-pct-dot" style="background:${statusColor}"></span><span>Inversión: <strong>${fmtCOP(inversiones)}</strong></span></div>
-          <div class="inv-pct-row"><span class="inv-pct-dot" style="background:var(--expense)"></span><span>Gastos: <strong>${pctGasto.toFixed(1)}%</strong></span></div>
-          <div class="inv-pct-row"><span class="inv-pct-dot" style="background:var(--bg3)"></span><span>Restante: <strong>${pctRest.toFixed(1)}%</strong></span></div>
-          <div class="inv-pct-row"><span class="inv-pct-dot" style="background:var(--accent)"></span><span>Meta recomendada: <strong>20%</strong></span></div>
-        </div>
-      </div>
-      <div class="inv-pct-bar-wrap">
-        <div class="inv-pct-bar">
-          <div class="inv-pct-bar-fill expense" style="width:${Math.min(pctGasto,100)}%"></div>
-          <div class="inv-pct-bar-fill invest" style="width:${Math.min(pctInv, Math.max(0, 100 - Math.min(pctGasto,100)))}%"></div>
-        </div>
-        <div class="inv-pct-bar-labels"><span>Gastos</span><span>Inversión</span></div>
-      </div>
-      <div class="inv-pct-msg" style="color:${statusColor}"><i class="fas ${pctInv >= recPct ? 'fa-circle-check' : pctInv >= 10 ? 'fa-circle-exclamation' : 'fa-triangle-exclamation'}"></i> ${statusMsg}</div>
-    `;
+      <div class="inv-alert ${alertClass}">
+        <div class="inv-alert-header"><i class="fas ${icon}"></i><strong>${titulo}</strong></div>
+        <p class="inv-alert-tip">${consejo}</p>
+      </div>`;
   }
 
   // Alertas
@@ -1164,8 +1157,31 @@ function renderPerfil() {
       </button>
     </div>`;
 
+  // Mostrar foto de perfil si existe
+  const avatarEl = document.querySelector('.profile-avatar');
+  if (avatarEl) {
+    if (p.photo) {
+      avatarEl.style.backgroundImage = `url(${p.photo})`;
+      avatarEl.style.backgroundSize = 'cover';
+      avatarEl.style.backgroundPosition = 'center';
+      avatarEl.innerHTML = '';
+    } else {
+      avatarEl.style.backgroundImage = 'none';
+      avatarEl.innerHTML = '<i class="fas fa-user"></i>';
+    }
+  }
+
+  // Canasta familiar estimada según personas en casa
+  const peopleHome = APP.profile.peopleAtHome || 1;
+  const canastaBase = 1286609; // DANE 2026 por persona
+  const canasta = Math.round(canastaBase * peopleHome);
+
   document.getElementById('indicators-table').innerHTML = `
     <div class="ind-row"><span class="ind-row-label">Salario mínimo</span><span class="ind-row-val">${fmtCOP(col.salarioMinimo)}</span></div>
+    <div class="ind-row" style="background:var(--bg3);border-radius:6px;padding:6px 8px;">
+      <span class="ind-row-label">🛒 Canasta familiar (${peopleHome} persona${peopleHome>1?'s':''})</span>
+      <span class="ind-row-val" style="color:var(--accent)">${fmtCOP(canasta)}</span>
+    </div>
     <div class="ind-row"><span class="ind-row-label">Auxilio de transporte</span><span class="ind-row-val">${fmtCOP(col.auxilioTransporte)}</span></div>
     <div class="ind-row"><span class="ind-row-label">Salario vital</span><span class="ind-row-val">${fmtCOP(col.salarioVital)}</span></div>
     <div class="ind-row"><span class="ind-row-label">Inflación anual (IPC)</span><span class="ind-row-val" style="color:var(--warning)">${col.inflacionAnual}%</span></div>
@@ -1197,6 +1213,12 @@ async function forceUpdateIndicators() {
 
 function openEditPerfil() {
   const p = APP.profile;
+  // Mostrar foto actual en el modal
+  const previewEl = document.getElementById('edit-perfil-photo-preview');
+  if (previewEl) {
+    previewEl.style.backgroundImage = p.photo ? `url(${p.photo})` : 'none';
+    previewEl.innerHTML = p.photo ? '' : '<i class="fas fa-camera"></i>';
+  }
   document.getElementById('edit-perfil-name').value = p.name || '';
   document.getElementById('edit-perfil-occupation').value = p.occupation || '';
   document.getElementById('edit-perfil-worktype').value = p.workType || 'empleado';
@@ -1216,11 +1238,31 @@ function openEditPerfil() {
 // =============================================
 
 function closeEditPerfil() {
+  window._pendingProfilePhoto = null;
   document.getElementById('edit-perfil-modal').classList.add('hidden');
+}
+
+function previewProfilePhoto(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  if (file.size > 2 * 1024 * 1024) { showToast('La foto debe pesar menos de 2MB', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    window._pendingProfilePhoto = e.target.result;
+    const preview = document.getElementById('edit-perfil-photo-preview');
+    if (preview) {
+      preview.style.backgroundImage = `url(${e.target.result})`;
+      preview.innerHTML = '';
+    }
+  };
+  reader.readAsDataURL(file);
 }
 
 function saveEditPerfil() {
   const p = APP.profile;
+  // Guardar foto si se seleccionó una nueva
+  const photoData = window._pendingProfilePhoto;
+  if (photoData) { p.photo = photoData; window._pendingProfilePhoto = null; }
   p.name = document.getElementById('edit-perfil-name')?.value?.trim() || p.name;
   p.occupation = document.getElementById('edit-perfil-occupation')?.value?.trim() || p.occupation;
   p.workType = document.getElementById('edit-perfil-worktype')?.value || p.workType;
