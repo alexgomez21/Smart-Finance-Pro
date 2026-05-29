@@ -1,0 +1,12 @@
+{
+  "name": "functions",
+  "description": "Smart Finance Pro - Firebase Functions",
+  "scripts": { "serve": "firebase emulators:start --only functions" },
+  "engines": { "node": "20" },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-functions": "^6.0.0",
+    "@google/generative-ai": "^0.21.0"
+  },
+  "private": true
+}
