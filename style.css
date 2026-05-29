@@ -387,35 +387,24 @@ input[type=number]::-webkit-inner-spin-button { opacity: 1; }
 .ind-value.good { color: var(--income); }
 
 /* =============================================
-   INVESTMENT PERCENTAGE WIDGET
+   INVESTMENT ALERT WIDGET
    ============================================= */
-.inv-pct-widget {
-  background: var(--bg2); border-radius: var(--radius); padding: 18px 16px 14px;
-  border: 1px solid var(--border); margin-bottom: 20px; display: flex; flex-direction: column; gap: 14px;
+.inv-pct-widget { margin-bottom: 20px; }
+.inv-alert {
+  border-radius: var(--radius); padding: 14px 16px;
+  border-left: 4px solid; display: flex; flex-direction: column; gap: 8px;
 }
-.inv-pct-main { display: flex; align-items: center; gap: 18px; }
-.inv-pct-circle-wrap { position: relative; width: 90px; height: 90px; flex-shrink: 0; }
-.inv-pct-svg { width: 90px; height: 90px; }
-.inv-pct-label {
-  position: absolute; inset: 0; display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-}
-.inv-pct-num { font-size: 1.25rem; font-weight: 800; line-height: 1; }
-.inv-pct-sub { font-size: 0.65rem; color: var(--text3); margin-top: 2px; }
-.inv-pct-details { flex: 1; display: flex; flex-direction: column; gap: 7px; }
-.inv-pct-row { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--text2); }
-.inv-pct-row strong { color: var(--text1); }
-.inv-pct-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
-.inv-pct-bar-wrap { display: flex; flex-direction: column; gap: 5px; }
-.inv-pct-bar {
-  height: 10px; border-radius: 10px; background: var(--bg3);
-  overflow: hidden; display: flex;
-}
-.inv-pct-bar-fill { height: 100%; transition: width 0.5s ease; }
-.inv-pct-bar-fill.expense { background: var(--expense); }
-.inv-pct-bar-fill.invest { background: var(--income); }
-.inv-pct-bar-labels { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--text3); }
-.inv-pct-msg { font-size: 0.82rem; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+.inv-alert-ok    { background: var(--income-bg);  border-color: var(--income);  }
+.inv-alert-warn  { background: var(--invest-bg);  border-color: var(--invest);  }
+.inv-alert-bad   { background: var(--expense-bg); border-color: var(--expense); }
+.inv-alert-neutral { background: var(--bg3); border-color: var(--border); }
+.inv-alert-header { display: flex; align-items: center; gap: 10px; font-size: 0.9rem; }
+.inv-alert-header i { font-size: 1.1rem; flex-shrink: 0; }
+.inv-alert-ok    .inv-alert-header { color: var(--income);  }
+.inv-alert-warn  .inv-alert-header { color: var(--invest);  }
+.inv-alert-bad   .inv-alert-header { color: var(--expense); }
+.inv-alert-neutral .inv-alert-header { color: var(--text2); }
+.inv-alert-tip { font-size: 0.82rem; color: var(--text2); line-height: 1.5; margin: 0; padding-left: 2px; }
 
 /* =============================================
    CHARTS
@@ -912,22 +901,3 @@ input[type=number]::-webkit-inner-spin-button { opacity: 1; }
 .inv-mov-actions { margin-left: auto; display: flex; gap: 4px; }
 .inv-expandable .tx-info { flex: 1; min-width: 0; }
 
-/* =============================================
-   INVESTMENT ALERT (resumen simple)
-   ============================================= */
-.inv-pct-widget { margin-bottom: 20px; }
-.inv-alert {
-  border-radius: var(--radius); padding: 14px 16px;
-  border-left: 4px solid; display: flex; flex-direction: column; gap: 8px;
-}
-.inv-alert-ok    { background: var(--income-bg);  border-color: var(--income);  }
-.inv-alert-warn  { background: var(--invest-bg);  border-color: var(--invest);  }
-.inv-alert-bad   { background: var(--expense-bg); border-color: var(--expense); }
-.inv-alert-neutral { background: var(--bg3); border-color: var(--border); }
-.inv-alert-header { display: flex; align-items: center; gap: 10px; font-size: 0.9rem; }
-.inv-alert-header i { font-size: 1.1rem; flex-shrink: 0; }
-.inv-alert-ok    .inv-alert-header { color: var(--income);  }
-.inv-alert-warn  .inv-alert-header { color: var(--invest);  }
-.inv-alert-bad   .inv-alert-header { color: var(--expense); }
-.inv-alert-neutral .inv-alert-header { color: var(--text2); }
-.inv-alert-tip { font-size: 0.82rem; color: var(--text2); line-height: 1.5; margin: 0; padding-left: 2px; }
