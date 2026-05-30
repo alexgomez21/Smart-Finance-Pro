@@ -947,6 +947,7 @@
   <script src="js/charts.js"></script>
   <script src="js/demo.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/ai.js"></script>
   <!-- Firebase (al final, expone funciones globales que app.js ya usó) -->
   <script type="module" src="js/firebase.js"></script>
   <script>
@@ -983,5 +984,41 @@
       if (banner) banner.classList.add('hidden');
     });
   </script>
+
+  <!-- FinIA - Asistente Financiero con Gemini -->
+  <button id="finia-fab" onclick="toggleFinia()" title="Habla con FinIA">
+    <i class="fas fa-robot"></i>
+    <span class="finia-fab-label">FinIA</span>
+  </button>
+
+  <div id="finia-panel" class="hidden">
+    <div class="finia-header">
+      <div class="finia-header-info">
+        <div class="finia-avatar"><i class="fas fa-robot"></i></div>
+        <div>
+          <div class="finia-name">FinIA</div>
+          <div class="finia-status"><span class="finia-dot"></span> Powered by Gemini</div>
+        </div>
+      </div>
+      <div class="finia-header-actions">
+        <button onclick="clearFiniaChat()" title="Limpiar chat"><i class="fas fa-rotate"></i></button>
+        <button onclick="closeFinia()" title="Cerrar"><i class="fas fa-times"></i></button>
+      </div>
+    </div>
+    <div id="finia-messages" class="finia-messages"></div>
+    <div class="finia-suggestions">
+      <button onclick="sendFiniaSuggestion('Analiza mis finanzas de este mes')">📊 Analizar mes</button>
+      <button onclick="sendFiniaSuggestion('¿Cómo puedo ahorrar más?')">💡 Ahorrar más</button>
+      <button onclick="sendFiniaSuggestion('¿Estoy gastando demasiado?')">⚠️ Mis gastos</button>
+    </div>
+    <div class="finia-input-wrap">
+      <textarea id="finia-input" placeholder="Pregúntale a FinIA..." rows="1"
+        onkeydown="finiaKeydown(event)"></textarea>
+      <button onclick="sendFiniaMessage()" class="finia-send-btn">
+        <i class="fas fa-paper-plane"></i>
+      </button>
+    </div>
+  </div>
+
 </body>
 </html>
