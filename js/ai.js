@@ -1,56 +1,51 @@
 /* =============================================
-   AI.JS - FinIA: Chat con Gemini via Firebase Functions
+   AI.JS - FinIA: Asistente financiero con Gemini
    Smart Finance Pro - Colombia
+   =============================================
+   IMPORTANTE: Reemplaza TU_API_KEY_AQUI con tu
+   key de Google AI Studio (aistudio.google.com)
    ============================================= */
 
-// URLs de Firebase Functions — región us-central1 por defecto
-const FINIA_CHAT_URL       = "https://geminichat-uc5e5o3xja-uc.a.run.app";
-const FINIA_INDICATORS_URL = "https://updateindicadores-uc5e5o3xja-uc.a.run.app";
-
-// Nota: después del primer deploy, Firebase te da las URLs exactas.
-// Reemplaza las de arriba con las que te muestre la consola de Firebase.
+const GEMINI_API_KEY = AQ.Ab8RN6KNN1a-4-EjsZHpaI_RUxVCW5NBEGbjS_Qu8h1u2B3nDw
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
 let finiaMessages = [];
 let finiaOpen = false;
 
 // =============================================
-// CONTEXTO FINANCIERO COMPLETO PARA GEMINI
+// CONTEXTO FINANCIERO COMPLETO
 // =============================================
 function buildFinancialContext() {
   try {
     const p = APP.profile;
-    const saldo       = calcSaldo();
+    const saldo        = calcSaldo();
     const totalAhorros = calcTotalAhorros();
-    const totalDeuda  = calcTotalDeuda();
-    const totalInv    = APP.investments.reduce((s, i) => s + (i.currentValue || 0), 0);
+    const totalDeuda   = calcTotalDeuda();
+    const totalInv     = APP.investments.reduce((s, i) => s + (i.currentValue || 0), 0);
     const now = new Date();
     const m = now.getMonth() + 1;
     const y = now.getFullYear();
-    const ingresos   = sumTx(txOfMonth(m, y, 'ingreso'));
-    const gastos     = sumTx(txOfMonth(m, y, 'gasto'));
+    const ingresos    = sumTx(txOfMonth(m, y, 'ingreso'));
+    const gastos      = sumTx(txOfMonth(m, y, 'gasto'));
     const inversiones = sumTx(txOfMonth(m, y, 'inversion'));
-    const pctInv     = ingresos > 0 ? ((inversiones / ingresos) * 100).toFixed(1) : 0;
-    const score      = calcScore();
+    const pctInv      = ingresos > 0 ? ((inversiones / ingresos) * 100).toFixed(1) : 0;
+    const score       = calcScore();
 
-    // Top gastos del mes por categoría
     const gastosArr = txOfMonth(m, y, 'gasto');
     const freq = {};
     gastosArr.forEach(tx => { freq[tx.category] = (freq[tx.category] || 0) + tx.amount; });
     const topGastos = Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,5)
       .map(([cat,amt]) => `  - ${getCategoryLabel(cat)}: ${fmtCOP(amt)}`).join('\n');
 
-    // Metas de ahorro
     const metas = APP.savingGoals.length > 0
       ? APP.savingGoals.map(g => `  - ${g.name}: ${fmtCOP(g.balance||0)} / ${fmtCOP(g.targetAmount||0)} (${g.targetAmount>0?((g.balance||0)/g.targetAmount*100).toFixed(0):0}%)`).join('\n')
       : '  - Ninguna registrada';
 
-    // Deudas activas
     const deudas = APP.debts.filter(d => !d.paid);
     const deudasStr = deudas.length > 0
       ? deudas.map(d => `  - ${d.name}: ${fmtCOP(d.remainingBalance||d.totalAmount)} al ${d.interestRate}% E.A.`).join('\n')
       : '  - Ninguna activa';
 
-    // Inversiones
     const invsStr = APP.investments.length > 0
       ? APP.investments.map(i => `  - ${i.name} (${getCategoryLabel(i.type)}): ${fmtCOP(i.currentValue||0)}`).join('\n')
       : '  - Ninguna registrada';
@@ -60,8 +55,8 @@ function buildFinancialContext() {
 - Nombre: ${p.name || 'No especificado'}
 - Ocupación: ${p.occupation || '—'} | Tipo: ${p.workType || '—'}
 - Ciudad: ${p.city || 'Colombia'}
-- Salario mensual declarado: ${fmtCOP(p.monthlySalary)}
-- Personas en casa: ${p.peopleAtHome || 1} | Personas que sustenta: ${p.peopleSupport || 0}
+- Salario mensual: ${fmtCOP(p.monthlySalary)}
+- Personas en casa: ${p.peopleAtHome || 1} | Sustenta: ${p.peopleSupport || 0}
 - Vivienda: ${p.housing || '—'} | Pareja: ${p.hasPartner?'Sí':'No'} | Hijos: ${p.hasChildren?'Sí':'No'}
 
 === SITUACIÓN ACTUAL (${getMonthLabel(m, y)}) ===
@@ -71,7 +66,7 @@ function buildFinancialContext() {
 - Inversiones del mes: ${fmtCOP(inversiones)} (${pctInv}% del ingreso)
 - Total ahorros: ${fmtCOP(totalAhorros)}
 - Total deudas: ${fmtCOP(totalDeuda)}
-- Total inversiones (valor actual): ${fmtCOP(totalInv)}
+- Total inversiones: ${fmtCOP(totalInv)}
 - Puntaje financiero: ${score}/100
 
 === TOP GASTOS DEL MES ===
@@ -98,6 +93,127 @@ ${invsStr}
 }
 
 // =============================================
+// LLAMAR A GEMINI
+// =============================================
+async function callGemini(userMessage) {
+  const context = buildFinancialContext();
+  const systemPrompt = `Eres FinIA, un asesor financiero personal experto en finanzas colombianas integrado en la app Smart Finance Pro.
+Tienes acceso a los datos financieros reales del usuario que se muestran abajo.
+Responde siempre en español, de forma clara, empática y práctica.
+Usa cifras en pesos colombianos. Sé conciso pero útil.
+Usa emojis ocasionalmente. Considera siempre el contexto económico colombiano.
+Nunca inventes datos — si no tienes información, dilo claramente.
+
+DATOS FINANCIEROS REALES DEL USUARIO:
+${context}`;
+
+  // Construir historial para Gemini
+  const contents = [];
+
+  // Agregar historial previo
+  finiaMessages.slice(-10).forEach(msg => {
+    contents.push({
+      role: msg.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: msg.content }]
+    });
+  });
+
+  // Agregar mensaje actual
+  contents.push({
+    role: 'user',
+    parts: [{ text: userMessage }]
+  });
+
+  const body = {
+    system_instruction: { parts: [{ text: systemPrompt }] },
+    contents,
+    generationConfig: {
+      maxOutputTokens: 800,
+      temperature: 0.7
+    }
+  };
+
+  const response = await fetch(GEMINI_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error?.message || 'Error Gemini');
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sin respuesta';
+}
+
+// =============================================
+// ACTUALIZAR INDICADORES COLOMBIA CON GEMINI
+// =============================================
+window.forceUpdateIndicators = async function() {
+  const btn = document.getElementById('btn-update-indicators');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando...'; }
+  showToast('Consultando indicadores actualizados...', 'info');
+
+  const now = new Date();
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const mes = meses[now.getMonth()];
+  const año = now.getFullYear();
+
+  try {
+    const prompt = `Dame los indicadores económicos oficiales más recientes de Colombia para ${mes} ${año}.
+Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional, sin backticks. Ejemplo exacto del formato:
+{"salarioMinimo":1423500,"auxilioTransporte":200000,"inflacionAnual":5.56,"inflacionMensual":0.78,"interesBC":9.75,"tasaUsura":26.76,"mejorCDT":13.3,"canastaFamiliar":1286609,"mes":"${mes} ${año}"}`;
+
+    const body = {
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: 300, temperature: 0.1 }
+    };
+
+    const response = await fetch(GEMINI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'Error Gemini');
+
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const match = text.match(/\{[\s\S]*?\}/);
+    if (!match) throw new Error('No se encontró JSON');
+
+    const d = JSON.parse(match[0]);
+    if (!d.salarioMinimo || !d.inflacionAnual) throw new Error('Datos incompletos');
+
+    const updated = {
+      salarioMinimo:     d.salarioMinimo,
+      auxilioTransporte: d.auxilioTransporte || COLOMBIA.auxilioTransporte,
+      salarioVital:      d.salarioMinimo + (d.auxilioTransporte || COLOMBIA.auxilioTransporte),
+      inflacionAnual:    d.inflacionAnual,
+      inflacionMensual:  d.inflacionMensual || COLOMBIA.inflacionMensual,
+      interesBC:         d.interesBC || COLOMBIA.interesBC,
+      tasaUsura:         d.tasaUsura || COLOMBIA.tasaUsura,
+      mejorCDT:          d.mejorCDT || COLOMBIA.mejorCDT,
+      canastaFamiliar:   d.canastaFamiliar || COLOMBIA.canastaFamiliar,
+      mes:               d.mes || `${mes} ${año}`,
+      fuente:            'DANE / Superfinanciera / Banrep',
+      updatedAt:         `${año}-${String(now.getMonth()+1).padStart(2,'0')}-01`
+    };
+
+    Object.assign(COLOMBIA, updated);
+    APP.economicRef = { ...updated };
+    saveDataCloud();
+
+    showToast(`✅ Indicadores de ${updated.mes} actualizados`, 'success');
+    if (typeof renderPerfil === 'function') renderPerfil();
+    if (typeof renderDashboard === 'function') renderDashboard();
+
+  } catch(e) {
+    console.error('Error indicadores:', e);
+    showToast('No se pudieron actualizar. Intenta de nuevo.', 'error');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-rotate"></i> Actualizar'; }
+  }
+};
+
+// =============================================
 // ABRIR / CERRAR PANEL
 // =============================================
 window.toggleFinia = function() {
@@ -110,7 +226,7 @@ window.toggleFinia = function() {
     if (finiaMessages.length === 0) {
       const nombre = APP.profile.name ? `, ${APP.profile.name}` : '';
       addFiniaMessage('assistant',
-        `¡Hola${nombre}! 👋 Soy **FinIA**, tu asesor financiero personal.\n\nYa tengo acceso a tus datos financieros reales. Puedo:\n- 📊 Analizar tu situación actual\n- 💡 Darte consejos personalizados para Colombia\n- ❓ Responder cualquier pregunta sobre tus finanzas\n\n¿En qué te ayudo hoy?`);
+        `¡Hola${nombre}! 👋 Soy **FinIA**, tu asesor financiero personal con IA.\n\nYa tengo acceso a tus datos financieros reales. Puedo:\n- 📊 Analizar tu situación financiera\n- 💡 Darte consejos personalizados para Colombia\n- ❓ Responder tus preguntas sobre finanzas\n\n¿En qué te ayudo hoy?`);
     }
     setTimeout(() => document.getElementById('finia-input')?.focus(), 100);
   } else {
@@ -126,42 +242,33 @@ window.closeFinia = function() {
 };
 
 // =============================================
-// ENVIAR MENSAJE A GEMINI
+// ENVIAR MENSAJE
 // =============================================
 window.sendFiniaMessage = async function() {
   const input = document.getElementById('finia-input');
   const text = input?.value?.trim();
   if (!text) return;
+
+  if (GEMINI_API_KEY === 'TU_API_KEY_AQUI') {
+    addFiniaMessage('assistant', '⚠️ Falta configurar la API key de Gemini en el archivo ai.js');
+    return;
+  }
+
   input.value = '';
   input.disabled = true;
 
   addFiniaMessage('user', text);
-  finiaMessages.push({ role: 'user', content: text });
-
   const typingId = showFiniaTyping();
 
   try {
-    const response = await fetch(FINIA_CHAT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages: finiaMessages,
-        context: buildFinancialContext()
-      })
-    });
-
-    const data = await response.json();
+    const reply = await callGemini(text);
     removeFiniaTyping(typingId);
-
-    if (data.reply) {
-      finiaMessages.push({ role: 'assistant', content: data.reply });
-      addFiniaMessage('assistant', data.reply);
-    } else {
-      addFiniaMessage('assistant', '❌ Sin respuesta del servidor. Intenta de nuevo.');
-    }
+    finiaMessages.push({ role: 'user', content: text });
+    finiaMessages.push({ role: 'assistant', content: reply });
+    addFiniaMessage('assistant', reply);
   } catch(err) {
     removeFiniaTyping(typingId);
-    addFiniaMessage('assistant', '❌ Error de conexión. Verifica tu internet e intenta de nuevo.');
+    addFiniaMessage('assistant', '❌ Error de conexión con Gemini. Verifica tu internet e intenta de nuevo.');
     console.error('FinIA error:', err);
   }
 
@@ -169,9 +276,6 @@ window.sendFiniaMessage = async function() {
   input.focus();
 };
 
-// =============================================
-// SUGERENCIAS RÁPIDAS Y TECLADO
-// =============================================
 window.sendFiniaSuggestion = function(text) {
   const input = document.getElementById('finia-input');
   if (input) { input.value = text; }
@@ -185,9 +289,6 @@ window.finiaKeydown = function(e) {
   }
 };
 
-// =============================================
-// LIMPIAR CHAT
-// =============================================
 window.clearFiniaChat = function() {
   finiaMessages = [];
   const msgs = document.getElementById('finia-messages');
@@ -196,67 +297,11 @@ window.clearFiniaChat = function() {
 };
 
 // =============================================
-// ACTUALIZAR INDICADORES COLOMBIA
-// =============================================
-window.forceUpdateIndicators = async function() {
-  const btn = document.getElementById('btn-update-indicators');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando...'; }
-  showToast('Consultando indicadores actualizados...', 'info');
-
-  const now = new Date();
-  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-
-  try {
-    const response = await fetch(FINIA_INDICATORS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mes: meses[now.getMonth()],
-        año: now.getFullYear()
-      })
-    });
-
-    const result = await response.json();
-    if (!result.ok || !result.data) throw new Error(result.error || 'Sin datos');
-
-    const d = result.data;
-    const updated = {
-      salarioMinimo:     d.salarioMinimo,
-      auxilioTransporte: d.auxilioTransporte || COLOMBIA.auxilioTransporte,
-      salarioVital:      d.salarioMinimo + (d.auxilioTransporte || COLOMBIA.auxilioTransporte),
-      inflacionAnual:    d.inflacionAnual,
-      inflacionMensual:  d.inflacionMensual || COLOMBIA.inflacionMensual,
-      interesBC:         d.interesBC || COLOMBIA.interesBC,
-      tasaUsura:         d.tasaUsura || COLOMBIA.tasaUsura,
-      mejorCDT:          d.mejorCDT || COLOMBIA.mejorCDT,
-      canastaFamiliar:   d.canastaFamiliar || COLOMBIA.canastaFamiliar,
-      mes:               d.mes || `${meses[now.getMonth()]} ${now.getFullYear()}`,
-      fuente:            'DANE / Superfinanciera / Banrep',
-      updatedAt:         `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`
-    };
-
-    Object.assign(COLOMBIA, updated);
-    APP.economicRef = { ...updated };
-    saveDataCloud();
-
-    showToast(`✅ Indicadores de ${updated.mes} actualizados`, 'success');
-    if (typeof renderPerfil === 'function') renderPerfil();
-    if (typeof renderDashboard === 'function') renderDashboard();
-
-  } catch(e) {
-    console.error('Error actualizando indicadores:', e);
-    showToast('No se pudieron actualizar. Intenta de nuevo.', 'error');
-    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-rotate"></i> Actualizar'; }
-  }
-};
-
-// =============================================
 // HELPERS UI
 // =============================================
 function addFiniaMessage(role, text) {
   const msgs = document.getElementById('finia-messages');
   if (!msgs) return;
-
   const html = text
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
@@ -264,7 +309,6 @@ function addFiniaMessage(role, text) {
     .replace(/## (.+)/g,  '<strong>$1</strong>')
     .replace(/^- (.+)/gm, '• $1')
     .replace(/\n/g, '<br>');
-
   const div = document.createElement('div');
   div.className = `finia-msg finia-msg-${role}`;
   div.innerHTML = `<div class="finia-bubble">${html}</div>`;
