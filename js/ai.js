@@ -6,7 +6,7 @@
    key de Google AI Studio (aistudio.google.com)
    ============================================= */
 
-const GEMINI_API_KEY = AQ.Ab8RN6KNN1a-4-EjsZHpaI_RUxVCW5NBEGbjS_Qu8h1u2B3nDw
+const GEMINI_API_KEY = "AQ.Ab8RN6KNN1a-4-EjsZHpaI_RUxVCW5NBEGbjS_Qu8h1u2B3nDw"
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
 let finiaMessages = [];
