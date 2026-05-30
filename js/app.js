@@ -1069,17 +1069,18 @@ Responde con estas secciones:
 ### 🎯 Meta para el próximo mes`;
 
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    // Usar Gemini (misma key que ai.js)
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const resp = await fetch(geminiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }]
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 1000, temperature: 0.7 }
       })
     });
     const data = await resp.json();
-    const text = (data.content||[]).map(c=>c.text||'').join('') || 'Sin respuesta';
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sin respuesta';
     const html = text
       .replace(/### (.+)/g, '<h3>$1</h3>')
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
