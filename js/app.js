@@ -1070,17 +1070,20 @@ Responde con estas secciones:
 
   try {
     // Usar Gemini (misma key que ai.js)
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-    const resp = await fetch(geminiUrl, {
+    const resp = await fetch(GROQ_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
       body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 1000, temperature: 0.7 }
+        model: GROQ_MODEL,
+        messages: [
+          { role: 'system', content: 'Eres FinIA, asesor financiero experto en Colombia. Responde en español, de forma clara y práctica.' },
+          { role: 'user', content: prompt }
+        ],
+        max_tokens: 1000, temperature: 0.7
       })
     });
     const data = await resp.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sin respuesta';
+    const text = data.choices?.[0]?.message?.content || 'Sin respuesta';
     const html = text
       .replace(/### (.+)/g, '<h3>$1</h3>')
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
