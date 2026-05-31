@@ -108,7 +108,7 @@ window.forceUpdateIndicators = async function() {
         model: GROQ_MODEL,
         messages: [
           { role: 'system', content: 'Eres experto en economía colombiana. Responde ÚNICAMENTE con JSON válido sin texto adicional ni backticks.' },
-          { role: 'user', content: `Indicadores económicos oficiales Colombia ${mes} ${año}. Datos de referencia 2026: salarioMinimo=1423500, auxilioTransporte=200000, inflacionAnual=5.56, inflacionMensual=0.78, interesBC=9.75, tasaUsura=26.76, mejorCDT=13.3, canastaFamiliar=1286609. Devuelve el JSON con los valores más precisos que conozcas para ${mes} ${año}: {"salarioMinimo":number,"auxilioTransporte":number,"inflacionAnual":number,"inflacionMensual":number,"interesBC":number,"tasaUsura":number,"mejorCDT":number,"canastaFamiliar":number,"mes":"${mes} ${año}"}` }
+          { role: 'user', content: `Indicadores económicos oficiales Colombia ${mes} ${año}. Datos oficiales verificados 2026: salarioMinimo=1750905, auxilioTransporte=249095, salarioVital=2000000, inflacionAnual=5.56, inflacionMensual=0.78, interesBC=11.25 (Banrep abril 2026), tasaUsura=26.76, mejorCDT=13.3, canastaFamiliar=1286609. Usa estos valores base y ajusta si tienes datos más recientes para ${mes} ${año}. Responde SOLO con este JSON: {"salarioMinimo":number,"auxilioTransporte":number,"inflacionAnual":number,"inflacionMensual":number,"interesBC":number,"tasaUsura":number,"mejorCDT":number,"canastaFamiliar":number,"mes":"${mes} ${año}"}` }
         ],
         max_tokens: 300, temperature: 0.1
       })

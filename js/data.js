@@ -12,12 +12,14 @@ const COLOMBIA = {
   salarioVital: 2000000,
   inflacionAnual: 5.56,
   inflacionMensual: 0.78,
-  interesBC: 17.84,
+  interesBC: 11.25,
   tasaUsura: 26.76,
   mejorCDT: 13.3,
+  canastaFamiliar: 1286609,
   referenciaCDT: { min: 9, max: 13.3 },
   año: 2026,
-  fuente: 'DANE/Superfinanciera Abr 2026'
+  mes: 'junio 2026',
+  fuente: 'DANE / Superfinanciera / Banrep Jun 2026'
 };
 
 // ---- Tipos de ingresos ----
