@@ -6,7 +6,7 @@
    console.groq.com (empieza por gsk_...)
    ============================================= */
 
-const GROQ_API_KEY = "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";
+const GROQ_API_KEY = "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";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "llama-3.3-70b-versatile";
 
