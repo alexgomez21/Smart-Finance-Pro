@@ -10,16 +10,16 @@ const COLOMBIA = {
   salarioMinimo: 1750905,
   auxilioTransporte: 249095,
   salarioVital: 2000000,
-  inflacionAnual: 5.56,
-  inflacionMensual: 0.78,
-  interesBC: 11.25,
-  tasaUsura: 26.76,
+  inflacionAnual: 5.84,
+  inflacionMensual: 0.47,
+  interesBC: 19.19,
+  tasaUsura: 28.79,
   mejorCDT: 13.3,
   canastaFamiliar: 1286609,
   referenciaCDT: { min: 9, max: 13.3 },
   año: 2026,
-  mes: 'junio 2026',
-  fuente: 'DANE / Superfinanciera / Banrep Jun 2026'
+  mes: 'julio 2026',
+  fuente: 'DANE / Superfinanciera / Banrep Jul 2026'
 };
 
 // ---- Tipos de ingresos ----
