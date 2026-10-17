@@ -1012,3 +1012,27 @@ input[type=number]::-webkit-inner-spin-button { opacity: 1; }
   transition: background 0.15s;
 }
 .finia-send-btn:hover { background: var(--accent-hover, #7c6ef7); }
+
+/* =============================================
+   CLICKABLE DASHBOARD CARDS
+   ============================================= */
+.clickable-card {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  user-select: none;
+}
+.clickable-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+  opacity: 0.92;
+}
+.clickable-card:active {
+  transform: scale(0.97);
+  opacity: 0.85;
+}
+.card-arrow {
+  font-size: 0.65rem;
+  opacity: 0.6;
+  margin-left: 3px;
+  vertical-align: middle;
+}
