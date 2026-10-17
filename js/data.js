@@ -43,6 +43,7 @@ const TIPOS_INGRESO = [
   { id: 'negocio', label: 'Negocio (especificar)', icon: 'fa-store', needsDetail: true },
   { id: 'inversion_retiro', label: 'Inversión / rendimiento', icon: 'fa-chart-bar' },
   { id: 'robado_recuperado', label: 'Malversación de fondos', icon: 'fa-shield' },
+  { id: 'utilidades', label: 'Utilidades / Ganancias negocio', icon: 'fa-chart-pie' },
   { id: 'otro', label: 'Otro', icon: 'fa-circle-plus' }
 ];
 
@@ -82,6 +83,8 @@ const TIPOS_GASTO = [
   { id: 'vehiculo', label: 'Vehículo (carro/moto)', icon: 'fa-car', hasSubtype: true },
   { id: 'azar_gasto', label: 'Juegos de azar', icon: 'fa-dice', isRisk: true },
   { id: 'app_online', label: 'Compras en app / online', icon: 'fa-mobile-screen', isRisk: true },
+  { id: 'donacion', label: 'Donación', icon: 'fa-hand-holding-heart' },
+  { id: 'suscripciones', label: 'Suscripciones', icon: 'fa-repeat' },
   { id: 'otro_gasto', label: 'Otro', icon: 'fa-circle-plus' }
 ];
 
