@@ -446,45 +446,45 @@
 
         <!-- Tarjetas resumen -->
         <div class="cards-grid">
-          <div class="summary-card income">
+          <div class="summary-card income clickable-card" onclick="navTo('ingresos')" title="Ver ingresos">
             <div class="card-icon"><i class="fas fa-arrow-trend-up"></i></div>
             <div class="card-info">
-              <span class="card-label">Ingresos</span>
+              <span class="card-label">Ingresos <i class="fas fa-chevron-right card-arrow"></i></span>
               <span class="card-value" id="dash-ingresos">$0</span>
             </div>
           </div>
-          <div class="summary-card expense">
+          <div class="summary-card expense clickable-card" onclick="navTo('gastos')" title="Ver gastos">
             <div class="card-icon"><i class="fas fa-arrow-trend-down"></i></div>
             <div class="card-info">
-              <span class="card-label">Gastos</span>
+              <span class="card-label">Gastos <i class="fas fa-chevron-right card-arrow"></i></span>
               <span class="card-value" id="dash-gastos">$0</span>
             </div>
           </div>
-          <div class="summary-card invest">
+          <div class="summary-card invest clickable-card" onclick="navTo('inversiones')" title="Ver inversiones">
             <div class="card-icon"><i class="fas fa-chart-line"></i></div>
             <div class="card-info">
-              <span class="card-label">Inversiones</span>
+              <span class="card-label">Inversiones <i class="fas fa-chevron-right card-arrow"></i></span>
               <span class="card-value" id="dash-inversiones">$0</span>
             </div>
           </div>
-          <div class="summary-card balance">
+          <div class="summary-card balance clickable-card" onclick="navTo('movimientos')" title="Ver movimientos">
             <div class="card-icon"><i class="fas fa-wallet"></i></div>
             <div class="card-info">
-              <span class="card-label">Saldo disponible</span>
+              <span class="card-label">Saldo disponible <i class="fas fa-chevron-right card-arrow"></i></span>
               <span class="card-value" id="dash-saldo">$0</span>
             </div>
           </div>
-          <div class="summary-card saving">
+          <div class="summary-card saving clickable-card" onclick="navTo('ahorros')" title="Ver ahorros">
             <div class="card-icon"><i class="fas fa-piggy-bank"></i></div>
             <div class="card-info">
-              <span class="card-label">Ahorros</span>
+              <span class="card-label">Ahorros <i class="fas fa-chevron-right card-arrow"></i></span>
               <span class="card-value" id="dash-ahorros">$0</span>
             </div>
           </div>
-          <div class="summary-card debt">
+          <div class="summary-card debt clickable-card" onclick="navTo('deudas')" title="Ver deudas">
             <div class="card-icon"><i class="fas fa-file-invoice-dollar"></i></div>
             <div class="card-info">
-              <span class="card-label">Deuda activa</span>
+              <span class="card-label">Deuda activa <i class="fas fa-chevron-right card-arrow"></i></span>
               <span class="card-value" id="dash-deuda">$0</span>
             </div>
           </div>
