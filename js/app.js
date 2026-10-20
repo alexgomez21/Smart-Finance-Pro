@@ -264,7 +264,10 @@ function renderDashboard() {
   document.getElementById('estado-value').textContent = estado.label;
   document.getElementById('estado-score').textContent = score + '/100';
 
-  // Saldo mes anterior
+  // Saldo del mes = ingresos - gastos - inversiones del mes actual
+  const saldoMes = ingresos - gastos - inversiones;
+
+  // Saldo mes anterior = todo lo acumulado ANTES del mes actual (saldo histórico)
   let prevMonth = currentMonth - 1;
   let prevYear = currentYear;
   if (prevMonth < 0) { prevMonth = 11; prevYear--; }
@@ -272,31 +275,31 @@ function renderDashboard() {
     let s = 0;
     APP.transactions.forEach(tx => {
       const d = new Date(tx.date + 'T12:00:00');
-      const txM = d.getMonth(); const txY = d.getFullYear();
-      const beforePrev = txY < prevYear || (txY === prevYear && txM <= prevMonth);
-      if (!beforePrev) return;
+      const txY = d.getFullYear(); const txM = d.getMonth();
+      // Solo transacciones anteriores al mes actual
+      if (txY > currentYear || (txY === currentYear && txM >= currentMonth)) return;
       if (tx.type === 'ingreso') s += tx.amount;
       else if (tx.type === 'gasto') s -= tx.amount;
       else if (tx.type === 'inversion') s -= tx.amount;
     });
     APP.savingMovements.forEach(sm => {
       const d = new Date(sm.date + 'T12:00:00');
-      const beforePrev = d.getFullYear() < prevYear || (d.getFullYear() === prevYear && d.getMonth() <= prevMonth);
-      if (!beforePrev) return;
+      const txY = d.getFullYear(); const txM = d.getMonth();
+      if (txY > currentYear || (txY === currentYear && txM >= currentMonth)) return;
       if (sm.direction === 'deposito') s -= sm.amount;
       else s += sm.amount;
     });
     return s;
   })();
 
-  // Saldo total acumulado (todos los meses hasta hoy)
-  const saldoTotal = calcSaldo();
+  // Saldo total = saldo mes anterior + saldo del mes actual
+  const saldoTotal = saldoAnterior + saldoMes;
 
   // Tarjetas
   document.getElementById('dash-ingresos').textContent = fmtCOP(ingresos);
   document.getElementById('dash-gastos').textContent = fmtCOP(gastos);
   document.getElementById('dash-inversiones').textContent = fmtCOP(inversiones);
-  document.getElementById('dash-saldo').textContent = fmtCOP(saldo);
+  document.getElementById('dash-saldo').textContent = fmtCOP(saldoMes);
   document.getElementById('dash-ahorros').textContent = fmtCOP(totalAhorros);
   document.getElementById('dash-deuda').textContent = fmtCOP(totalDeuda);
 
@@ -305,9 +308,9 @@ function renderDashboard() {
   const stEl = document.getElementById('dash-saldo-total');
   if (stEl) { stEl.textContent = fmtCOP(saldoTotal); stEl.style.color = saldoTotal < 0 ? 'var(--expense)' : 'var(--income)'; }
 
-  // Color saldo
+  // Color saldo del mes
   const saldoEl = document.getElementById('dash-saldo');
-  saldoEl.style.color = saldo < 0 ? 'var(--expense)' : 'var(--income)';
+  saldoEl.style.color = saldoMes < 0 ? 'var(--expense)' : 'var(--income)';
 
   // Resumen de inversión mensual (alerta + consejos)
   const invWidget = document.getElementById('inv-pct-widget');

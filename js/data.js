@@ -83,6 +83,7 @@ const TIPOS_GASTO = [
   { id: 'vehiculo', label: 'Vehículo (carro/moto)', icon: 'fa-car', hasSubtype: true },
   { id: 'azar_gasto', label: 'Juegos de azar', icon: 'fa-dice', isRisk: true },
   { id: 'app_online', label: 'Compras en app / online', icon: 'fa-mobile-screen', isRisk: true },
+  { id: 'diligencias', label: 'Diligencias', icon: 'fa-person-walking' },
   { id: 'donacion', label: 'Donación', icon: 'fa-hand-holding-heart' },
   { id: 'suscripciones', label: 'Suscripciones', icon: 'fa-repeat' },
   { id: 'otro_gasto', label: 'Otro', icon: 'fa-circle-plus' }
