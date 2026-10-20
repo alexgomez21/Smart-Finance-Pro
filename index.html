@@ -391,6 +391,9 @@
           <i class="fas fa-moon" id="theme-icon"></i>
           <span id="theme-label">Tema claro</span>
         </button>
+        <button class="btn-export" onclick="retirarSaldoAnterior()" title="Retirar saldo mes anterior" style="background:var(--bg3);color:var(--text2);">
+          <i class="fas fa-clock-rotate-left"></i> Retirar saldo anterior
+        </button>
         <button class="btn-export" onclick="exportarJSON()" title="Exportar datos">
           <i class="fas fa-download"></i> Exportar JSON
         </button>
@@ -444,7 +447,7 @@
           <div class="estado-score" id="estado-score">—</div>
         </div>
 
-        <!-- Tarjetas resumen -->
+        <!-- Tarjetas resumen (8 cards) -->
         <div class="cards-grid">
           <div class="summary-card income clickable-card" onclick="navTo('ingresos')" title="Ver ingresos">
             <div class="card-icon"><i class="fas fa-arrow-trend-up"></i></div>
@@ -463,15 +466,29 @@
           <div class="summary-card invest clickable-card" onclick="navTo('inversiones')" title="Ver inversiones">
             <div class="card-icon"><i class="fas fa-chart-line"></i></div>
             <div class="card-info">
-              <span class="card-label">Inversiones <i class="fas fa-chevron-right card-arrow"></i></span>
+              <span class="card-label">Inversión <i class="fas fa-chevron-right card-arrow"></i></span>
               <span class="card-value" id="dash-inversiones">$0</span>
             </div>
           </div>
           <div class="summary-card balance clickable-card" onclick="navTo('movimientos')" title="Ver movimientos">
             <div class="card-icon"><i class="fas fa-wallet"></i></div>
             <div class="card-info">
-              <span class="card-label">Saldo disponible <i class="fas fa-chevron-right card-arrow"></i></span>
+              <span class="card-label">Saldo del mes <i class="fas fa-chevron-right card-arrow"></i></span>
               <span class="card-value" id="dash-saldo">$0</span>
+            </div>
+          </div>
+          <div class="summary-card balance clickable-card" onclick="navTo('movimientos')" title="Saldo mes anterior" style="opacity:0.85;">
+            <div class="card-icon"><i class="fas fa-clock-rotate-left"></i></div>
+            <div class="card-info">
+              <span class="card-label">Saldo mes anterior</span>
+              <span class="card-value" id="dash-saldo-anterior">$0</span>
+            </div>
+          </div>
+          <div class="summary-card invest clickable-card" onclick="navTo('movimientos')" title="Saldo total acumulado" style="border:1.5px solid var(--accent);">
+            <div class="card-icon"><i class="fas fa-database"></i></div>
+            <div class="card-info">
+              <span class="card-label">Saldo total <i class="fas fa-chevron-right card-arrow"></i></span>
+              <span class="card-value" id="dash-saldo-total">$0</span>
             </div>
           </div>
           <div class="summary-card saving clickable-card" onclick="navTo('ahorros')" title="Ver ahorros">
@@ -484,7 +501,7 @@
           <div class="summary-card debt clickable-card" onclick="navTo('deudas')" title="Ver deudas">
             <div class="card-icon"><i class="fas fa-file-invoice-dollar"></i></div>
             <div class="card-info">
-              <span class="card-label">Deuda activa <i class="fas fa-chevron-right card-arrow"></i></span>
+              <span class="card-label">Deudas <i class="fas fa-chevron-right card-arrow"></i></span>
               <span class="card-value" id="dash-deuda">$0</span>
             </div>
           </div>
@@ -551,7 +568,8 @@
       <section class="page hidden" id="page-movimientos">
         <div class="page-header">
           <div>
-            <h1 class="page-title">Movimientos</h1>
+            <button class="btn-back" onclick="navTo('dashboard')" title="Volver al Dashboard"><i class="fas fa-arrow-left"></i></button>
+          <h1 class="page-title">Movimientos</h1>
             <p class="page-subtitle">Todo tu historial financiero</p>
           </div>
           <button class="btn-primary" onclick="openQuickAdd()">
@@ -582,7 +600,8 @@
       <section class="page hidden" id="page-ingresos">
         <div class="page-header">
           <div>
-            <h1 class="page-title">Ingresos</h1>
+            <button class="btn-back" onclick="navTo('dashboard')" title="Volver al Dashboard"><i class="fas fa-arrow-left"></i></button>
+          <h1 class="page-title">Ingresos</h1>
             <p class="page-subtitle">Todas tus fuentes de dinero</p>
           </div>
           <button class="btn-primary" onclick="openAddModal('ingreso')">
@@ -596,7 +615,8 @@
       <section class="page hidden" id="page-gastos">
         <div class="page-header">
           <div>
-            <h1 class="page-title">Gastos</h1>
+            <button class="btn-back" onclick="navTo('dashboard')" title="Volver al Dashboard"><i class="fas fa-arrow-left"></i></button>
+          <h1 class="page-title">Gastos</h1>
             <p class="page-subtitle">Controla en qué se va tu dinero</p>
           </div>
           <button class="btn-primary" onclick="openAddModal('gasto')">
@@ -610,7 +630,8 @@
       <section class="page hidden" id="page-inversiones">
         <div class="page-header">
           <div>
-            <h1 class="page-title">Inversiones</h1>
+            <button class="btn-back" onclick="navTo('dashboard')" title="Volver al Dashboard"><i class="fas fa-arrow-left"></i></button>
+          <h1 class="page-title">Inversiones</h1>
             <p class="page-subtitle">Tu dinero trabajando para ti</p>
           </div>
           <button class="btn-primary" onclick="openAddModal('inversion')">
@@ -625,7 +646,8 @@
       <section class="page hidden" id="page-ahorros">
         <div class="page-header">
           <div>
-            <h1 class="page-title">Ahorros</h1>
+            <button class="btn-back" onclick="navTo('dashboard')" title="Volver al Dashboard"><i class="fas fa-arrow-left"></i></button>
+          <h1 class="page-title">Ahorros</h1>
             <p class="page-subtitle">Tus metas y fondos</p>
           </div>
           <button class="btn-primary" onclick="openAddModal('ahorro')">
@@ -641,7 +663,8 @@
       <section class="page hidden" id="page-deudas">
         <div class="page-header">
           <div>
-            <h1 class="page-title">Deudas</h1>
+            <button class="btn-back" onclick="navTo('dashboard')" title="Volver al Dashboard"><i class="fas fa-arrow-left"></i></button>
+          <h1 class="page-title">Deudas</h1>
             <p class="page-subtitle">Tus compromisos financieros</p>
           </div>
           <button class="btn-primary" onclick="openAddModal('deuda')">
@@ -655,17 +678,29 @@
       <section class="page hidden" id="page-reportes">
         <div class="page-header">
           <div>
-            <h1 class="page-title">Reportes</h1>
+            <button class="btn-back" onclick="navTo('dashboard')" title="Volver al Dashboard"><i class="fas fa-arrow-left"></i></button>
+          <h1 class="page-title">Reportes</h1>
             <p class="page-subtitle">Análisis profundo de tus finanzas</p>
           </div>
         </div>
         <div class="period-tabs">
           <button class="period-tab active" onclick="setPeriod('mes', this)">Este mes</button>
+          <button class="period-tab" onclick="setPeriod('mes-elegir', this)">Elegir mes</button>
           <button class="period-tab" onclick="setPeriod('trimestre', this)">Trimestre</button>
           <button class="period-tab" onclick="setPeriod('anual', this)">Anual</button>
         </div>
+        <div id="report-month-picker" class="hidden" style="display:none;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+          <select id="report-month-select" class="form-input" style="flex:1;min-width:130px;" onchange="setReportMonthYear()">
+            <option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option>
+            <option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option>
+            <option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option>
+            <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+          </select>
+          <select id="report-year-select" class="form-input" style="width:100px;" onchange="setReportMonthYear()"></select>
+        </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
           <button class="report-section-tab active" onclick="setReportSection('graficas', this)">📊 Gráficas</button>
+          <button class="report-section-tab" onclick="setReportSection('resumen', this)">📋 Resumen</button>
           <button class="report-section-tab" onclick="setReportSection('top-gastos', this)">🔴 Top Gastos</button>
           <button class="report-section-tab" onclick="setReportSection('frecuentes', this)">🔁 Frecuentes</button>
           <button class="report-section-tab" onclick="setReportSection('comparacion', this)">📅 Comparar</button>
@@ -678,6 +713,13 @@
           <div class="chart-container"><canvas id="chart-income-type"></canvas></div>
           <div class="section-title">Gastos por categoría</div>
           <div class="chart-container"><canvas id="chart-expense-cat"></canvas></div>
+        </div>
+        <div id="rs-resumen" class="report-section hidden">
+          <div class="section-title" id="resumen-title">Resumen del mes</div>
+          <div id="resumen-content"></div>
+          <button class="btn-primary" style="width:100%;margin-top:16px;" onclick="exportResumenExcel()">
+            <i class="fas fa-file-excel"></i> Exportar a Excel
+          </button>
         </div>
         <div id="rs-top-gastos" class="report-section hidden">
           <div class="section-title">Gastos más altos del periodo</div>
@@ -723,7 +765,8 @@
       <section class="page hidden" id="page-azar">
         <div class="page-header">
           <div>
-            <h1 class="page-title">Juegos de Azar</h1>
+            <button class="btn-back" onclick="navTo('dashboard')" title="Volver al Dashboard"><i class="fas fa-arrow-left"></i></button>
+          <h1 class="page-title">Juegos de Azar</h1>
             <p class="page-subtitle">Ganancias vs Pérdidas</p>
           </div>
           <button class="btn-primary" onclick="openAddModal('azar')">
@@ -743,6 +786,7 @@
       <!-- ===== PERFIL PAGE ===== -->
       <section class="page hidden" id="page-perfil">
         <div class="page-header">
+          <button class="btn-back" onclick="navTo('dashboard')" title="Volver al Dashboard"><i class="fas fa-arrow-left"></i></button>
           <h1 class="page-title">Mi Perfil</h1>
         </div>
         <div class="profile-card" style="flex-direction:column;align-items:center;text-align:center;">
