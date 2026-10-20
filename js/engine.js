@@ -666,10 +666,10 @@ async function updateColombiaIndicators(force = false) {
   const stored = APP.economicRef || {};
   const updatedAt = stored.updatedAt || '';
   const now = new Date();
-  const currentYM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const currentYear = String(now.getFullYear());
 
-  // Solo actualizar si es un mes nuevo o si se fuerza
-  if (!force && updatedAt && updatedAt.startsWith(currentYM)) return;
+  // Solo actualizar si es un año nuevo (no cada mes)
+  if (!force && updatedAt && updatedAt.startsWith(currentYear)) return;
 
   const monthNames = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   const mes = monthNames[now.getMonth()];
@@ -715,7 +715,7 @@ Fuentes: DANE, Superfinanciera, Banco de la República Colombia. Si no hay dato 
       año,
       mes: newData.mes || `${mes} ${año}`,
       fuente: 'DANE/Superfinanciera Colombia',
-      updatedAt: currentYM + '-01'
+      updatedAt: currentYear + '-01-01'
     };
     // Actualizar también el objeto COLOMBIA en memoria
     Object.assign(COLOMBIA, APP.economicRef);

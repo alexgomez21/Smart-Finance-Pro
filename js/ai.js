@@ -92,55 +92,6 @@ async function callGroq(userMessage) {
   return data.choices?.[0]?.message?.content || 'Sin respuesta';
 }
 
-window.forceUpdateIndicators = async function() {
-  const btn = document.getElementById('btn-update-indicators');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando...'; }
-  showToast('Consultando indicadores actualizados...', 'info');
-  const now = new Date();
-  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-  const mes = meses[now.getMonth()];
-  const año = now.getFullYear();
-  try {
-    const response = await fetch(GROQ_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        messages: [
-          { role: 'system', content: 'Eres experto en economía colombiana. Responde ÚNICAMENTE con JSON válido sin texto adicional ni backticks.' },
-          { role: 'user', content: `Indicadores económicos oficiales Colombia ${mes} ${año}. Datos oficiales verificados 2026: salarioMinimo=1750905, auxilioTransporte=249095, salarioVital=2000000, inflacionAnual=5.56, inflacionMensual=0.78, interesBC=11.25 (Banrep abril 2026), tasaUsura=26.76, mejorCDT=13.3, canastaFamiliar=1286609. Usa estos valores base y ajusta si tienes datos más recientes para ${mes} ${año}. Responde SOLO con este JSON: {"salarioMinimo":number,"auxilioTransporte":number,"inflacionAnual":number,"inflacionMensual":number,"interesBC":number,"tasaUsura":number,"mejorCDT":number,"canastaFamiliar":number,"mes":"${mes} ${año}"}` }
-        ],
-        max_tokens: 300, temperature: 0.1
-      })
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message || 'Error Groq');
-    const text = data.choices?.[0]?.message?.content || '';
-    const match = text.match(/\{[\s\S]*?\}/);
-    if (!match) throw new Error('No JSON');
-    const d = JSON.parse(match[0]);
-    if (!d.salarioMinimo) throw new Error('Datos incompletos');
-    const updated = {
-      salarioMinimo: d.salarioMinimo, auxilioTransporte: d.auxilioTransporte || COLOMBIA.auxilioTransporte,
-      salarioVital: d.salarioMinimo + (d.auxilioTransporte || COLOMBIA.auxilioTransporte),
-      inflacionAnual: d.inflacionAnual, inflacionMensual: d.inflacionMensual || COLOMBIA.inflacionMensual,
-      interesBC: d.interesBC || COLOMBIA.interesBC, tasaUsura: d.tasaUsura || COLOMBIA.tasaUsura,
-      mejorCDT: d.mejorCDT || COLOMBIA.mejorCDT, canastaFamiliar: d.canastaFamiliar || COLOMBIA.canastaFamiliar,
-      mes: d.mes || `${mes} ${año}`, fuente: 'DANE / Superfinanciera / Banrep',
-      updatedAt: `${año}-${String(now.getMonth()+1).padStart(2,'0')}-01`
-    };
-    Object.assign(COLOMBIA, updated);
-    APP.economicRef = { ...updated };
-    saveDataCloud();
-    showToast(`✅ Indicadores de ${updated.mes} actualizados`, 'success');
-    if (typeof renderPerfil === 'function') renderPerfil();
-    if (typeof renderDashboard === 'function') renderDashboard();
-  } catch(e) {
-    console.error('Error indicadores:', e);
-    showToast('No se pudieron actualizar. Intenta de nuevo.', 'error');
-    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-rotate"></i> Actualizar'; }
-  }
-};
 
 window.toggleFinia = function() {
   finiaOpen = !finiaOpen;
