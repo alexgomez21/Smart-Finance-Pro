@@ -49,7 +49,7 @@ function startApp() {
   updateNavUser();
   navTo('dashboard');
 
-  // Actualizar indicadores Colombia si es un mes nuevo (en background)
+  // Actualizar indicadores Colombia si es un año nuevo (en background)
   setTimeout(() => updateColombiaIndicators(false), 3000);
 }
 
@@ -264,6 +264,34 @@ function renderDashboard() {
   document.getElementById('estado-value').textContent = estado.label;
   document.getElementById('estado-score').textContent = score + '/100';
 
+  // Saldo mes anterior
+  let prevMonth = currentMonth - 1;
+  let prevYear = currentYear;
+  if (prevMonth < 0) { prevMonth = 11; prevYear--; }
+  const saldoAnterior = (() => {
+    let s = 0;
+    APP.transactions.forEach(tx => {
+      const d = new Date(tx.date + 'T12:00:00');
+      const txM = d.getMonth(); const txY = d.getFullYear();
+      const beforePrev = txY < prevYear || (txY === prevYear && txM <= prevMonth);
+      if (!beforePrev) return;
+      if (tx.type === 'ingreso') s += tx.amount;
+      else if (tx.type === 'gasto') s -= tx.amount;
+      else if (tx.type === 'inversion') s -= tx.amount;
+    });
+    APP.savingMovements.forEach(sm => {
+      const d = new Date(sm.date + 'T12:00:00');
+      const beforePrev = d.getFullYear() < prevYear || (d.getFullYear() === prevYear && d.getMonth() <= prevMonth);
+      if (!beforePrev) return;
+      if (sm.direction === 'deposito') s -= sm.amount;
+      else s += sm.amount;
+    });
+    return s;
+  })();
+
+  // Saldo total acumulado (todos los meses hasta hoy)
+  const saldoTotal = calcSaldo();
+
   // Tarjetas
   document.getElementById('dash-ingresos').textContent = fmtCOP(ingresos);
   document.getElementById('dash-gastos').textContent = fmtCOP(gastos);
@@ -271,6 +299,11 @@ function renderDashboard() {
   document.getElementById('dash-saldo').textContent = fmtCOP(saldo);
   document.getElementById('dash-ahorros').textContent = fmtCOP(totalAhorros);
   document.getElementById('dash-deuda').textContent = fmtCOP(totalDeuda);
+
+  const saEl = document.getElementById('dash-saldo-anterior');
+  if (saEl) { saEl.textContent = fmtCOP(saldoAnterior); saEl.style.color = saldoAnterior < 0 ? 'var(--expense)' : 'var(--text1)'; }
+  const stEl = document.getElementById('dash-saldo-total');
+  if (stEl) { stEl.textContent = fmtCOP(saldoTotal); stEl.style.color = saldoTotal < 0 ? 'var(--expense)' : 'var(--income)'; }
 
   // Color saldo
   const saldoEl = document.getElementById('dash-saldo');
@@ -762,6 +795,65 @@ function doDeleteSavingMov(movId) {
 }
 
 // =============================================
+// RETIRAR SALDO MES ANTERIOR
+// =============================================
+
+function retirarSaldoAnterior() {
+  let prevMonth = currentMonth - 1;
+  let prevYear = currentYear;
+  if (prevMonth < 0) { prevMonth = 11; prevYear--; }
+
+  const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const mesLabel = `${meses[prevMonth]} ${prevYear}`;
+
+  // Calculate saldo of previous month
+  let saldoPrev = 0;
+  APP.transactions.forEach(tx => {
+    const d = new Date(tx.date + 'T12:00:00');
+    const txM = d.getMonth(); const txY = d.getFullYear();
+    if (txY > prevYear || (txY === prevYear && txM > prevMonth)) return;
+    if (tx.type === 'ingreso') saldoPrev += tx.amount;
+    else if (tx.type === 'gasto') saldoPrev -= tx.amount;
+    else if (tx.type === 'inversion') saldoPrev -= tx.amount;
+  });
+  APP.savingMovements.forEach(sm => {
+    const d = new Date(sm.date + 'T12:00:00');
+    if (d.getFullYear() > prevYear || (d.getFullYear() === prevYear && d.getMonth() > prevMonth)) return;
+    if (sm.direction === 'deposito') saldoPrev -= sm.amount;
+    else saldoPrev += sm.amount;
+  });
+
+  if (saldoPrev <= 0) {
+    showToast(`El saldo de ${mesLabel} es ${fmtCOP(saldoPrev)} — no hay nada que retirar`, 'error');
+    return;
+  }
+
+  showConfirm(
+    `Retirar saldo de ${mesLabel}`,
+    `El saldo acumulado de ${mesLabel} es ${fmtCOP(saldoPrev)}. Al retirarlo se registrará como un gasto sin categoría visible. ¿Continuar?`,
+    () => {
+      // Register as a hidden "saldo retirado" transaction in current month
+      const tx = {
+        id: genId(),
+        type: 'gasto',
+        category: 'retiro_saldo_anterior',
+        description: `Retiro saldo ${mesLabel}`,
+        amount: saldoPrev,
+        date: todayStr(),
+        notes: `Saldo retirado de ${mesLabel}`,
+        hidden: true,
+        createdAt: Date.now()
+      };
+      APP.transactions.push(tx);
+      saveDataCloud();
+      showToast(`Saldo de ${mesLabel} retirado: ${fmtCOP(saldoPrev)} ✓`, 'success');
+      if (typeof toggleSidebar === 'function') toggleSidebar();
+      renderDashboard();
+    }
+  );
+}
+
+// =============================================
 // DEUDAS
 // =============================================
 
@@ -824,7 +916,10 @@ function renderDeudas() {
           </div>
         </div>
         <div style="font-size:0.82rem;color:var(--text2);margin-bottom:12px;padding:8px;background:var(--bg3);border-radius:6px;">${advice}</div>
-        ${debt.paid ? '<div style="color:var(--income);font-weight:700;padding:8px 0;">✅ Deuda pagada</div>' : `
+        ${debt.paid ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;">
+          <span style="color:var(--income);font-weight:700;">✅ Deuda pagada</span>
+          <button class="tx-btn delete" onclick="deleteDebtConfirm('${debt.id}')" title="Eliminar"><i class="fas fa-trash"></i></button>
+        </div>` : `
         <div class="debt-actions">
           <button class="btn-primary" onclick="openPayDebt('${debt.id}')"><i class="fas fa-dollar-sign"></i> Pagar cuota</button>
           <button class="btn-secondary" onclick="deleteDebtConfirm('${debt.id}')"><i class="fas fa-trash"></i></button>
@@ -864,6 +959,7 @@ function renderReportes() {
   renderTopGastos();
   renderFrecuentes();
   renderComparacion();
+  renderResumen();
 }
 
 function setReportSection(section, btn) {
@@ -885,6 +981,14 @@ function getTxPeriodo(tipo) {
     return APP.transactions.filter(tx => {
       const d = new Date(tx.date + 'T12:00:00');
       return d.getMonth() === m && d.getFullYear() === y && (!tipo || tx.type === tipo);
+    });
+  }
+  if (reportPeriod === 'mes-elegir') {
+    const rm = reportMonth - 1; // 0-based
+    const ry = reportYear;
+    return APP.transactions.filter(tx => {
+      const d = new Date(tx.date + 'T12:00:00');
+      return d.getMonth() === rm && d.getFullYear() === ry && (!tipo || tx.type === tipo);
     });
   }
   if (reportPeriod === 'trimestre') {
@@ -938,10 +1042,10 @@ function renderFrecuentes() {
   const maxFreq = sorted[0][1];
   const catLabel = id => (TIPOS_GASTO.find(t => t.id === id) || {label: id}).label;
   container.innerHTML = sorted.map(([cat, count]) => `
-    <div class="freq-item">
+    <div class="freq-item" onclick="toggleFrecDetalle('${cat}')" style="cursor:pointer;">
       <div class="freq-bar-wrap">
         <div class="freq-label">
-          <span>${catLabel(cat)}</span>
+          <span>${catLabel(cat)} <i class="fas fa-chevron-down freq-chevron" id="chev-${cat}" style="font-size:0.7rem;color:var(--text3);transition:transform 0.2s;"></i></span>
           <span style="color:var(--expense);font-weight:700;">${fmtCOP(totales[cat])}</span>
         </div>
         <div class="freq-bar-bg">
@@ -949,7 +1053,111 @@ function renderFrecuentes() {
         </div>
       </div>
       <div class="freq-count">${count} vez${count>1?'es':''}</div>
+      <div class="freq-detalle hidden" id="frecdet-${cat}">
+        ${gastos.filter(t => (t.category||'otro_gasto') === cat).sort((a,b)=>b.date.localeCompare(a.date)).map(t => `
+          <div class="freq-det-row">
+            <span class="freq-det-date">${fmtDate(t.date)}</span>
+            <span class="freq-det-desc">${t.description || '—'}</span>
+            <span class="freq-det-amt">${fmtCOP(t.amount)}</span>
+          </div>`).join('')}
+      </div>
     </div>`).join('');
+}
+
+function toggleFrecDetalle(cat) {
+  const det = document.getElementById('frecdet-' + cat);
+  const chev = document.getElementById('chev-' + cat);
+  if (!det) return;
+  const open = !det.classList.contains('hidden');
+  det.classList.toggle('hidden', open);
+  if (chev) chev.style.transform = open ? '' : 'rotate(180deg)';
+}
+
+function renderResumen() {
+  const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const now = new Date();
+  let label = '';
+  let m, y;
+  if (reportPeriod === 'mes-elegir') {
+    m = reportMonth - 1; y = reportYear;
+    label = `${meses[m]} ${y}`;
+  } else if (reportPeriod === 'mes') {
+    m = now.getMonth(); y = now.getFullYear();
+    label = `${meses[m]} ${y}`;
+  } else {
+    label = reportPeriod === 'trimestre' ? 'Últimos 3 meses' : `Año ${y || now.getFullYear()}`;
+  }
+
+  const txs = getTxPeriodo(null);
+  const ingresos  = txs.filter(t => t.type === 'ingreso').reduce((s,t) => s+t.amount, 0);
+  const gastos    = txs.filter(t => t.type === 'gasto').reduce((s,t) => s+t.amount, 0);
+  const inversion = txs.filter(t => t.type === 'inversion').reduce((s,t) => s+t.amount, 0);
+  const ahorros   = APP.savingMovements.filter(sm => {
+    const d = new Date(sm.date + 'T12:00:00');
+    if (reportPeriod === 'mes') return d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear() && sm.direction==='deposito';
+    if (reportPeriod === 'mes-elegir') return d.getMonth()===(reportMonth-1) && d.getFullYear()===reportYear && sm.direction==='deposito';
+    return sm.direction === 'deposito';
+  }).reduce((s,sm) => s+sm.amount, 0);
+  const balance   = ingresos - gastos - inversion;
+  const deudas    = calcTotalDeuda();
+  const nGastos   = txs.filter(t => t.type === 'gasto').length;
+
+  const title = document.getElementById('resumen-title');
+  if (title) title.textContent = `Resumen — ${label}`;
+
+  const container = document.getElementById('resumen-content');
+  if (!container) return;
+
+  const row = (icon, label, value, color) => `
+    <div class="resumen-row">
+      <span class="resumen-icon"><i class="fas ${icon}"></i></span>
+      <span class="resumen-label">${label}</span>
+      <span class="resumen-value" style="color:${color||'var(--text1)'}">${value}</span>
+    </div>`;
+
+  container.innerHTML = `
+    <div class="resumen-card">
+      ${row('fa-arrow-trend-up','Ingresos',fmtCOP(ingresos),'var(--income)')}
+      ${row('fa-arrow-trend-down','Gastos',fmtCOP(gastos),'var(--expense)')}
+      ${row('fa-chart-line','Inversión',fmtCOP(inversion),'var(--invest)')}
+      ${row('fa-piggy-bank','Ahorros del periodo',fmtCOP(ahorros),'var(--saving)')}
+      ${row('fa-wallet','Balance',fmtCOP(balance), balance>=0?'var(--income)':'var(--expense)')}
+      ${row('fa-file-invoice-dollar','Deudas activas',fmtCOP(deudas),'var(--expense)')}
+      ${row('fa-receipt','N° de gastos',nGastos + ' gastos','')}
+    </div>`;
+
+  // Store for export
+  window._resumenData = { label, ingresos, gastos, inversion, ahorros, balance, deudas, nGastos };
+}
+
+function exportResumenExcel() {
+  if (!window._resumenData) { renderResumen(); }
+  const d = window._resumenData;
+  const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const now = new Date();
+  let mesLabel = d.label || (meses[now.getMonth()] + ' ' + now.getFullYear());
+
+  // Build CSV with columns: Mes | Ingresos | Gastos | Ahorro | Balance | Deudas | N° Gast
+  const header = ['Mes','Ingresos','Gastos','Ahorro','Balance','Deudas','N° Gast'];
+  const values = [
+    mesLabel,
+    d.ingresos,
+    d.gastos,
+    d.ahorros,
+    d.balance,
+    d.deudas,
+    d.nGastos
+  ];
+
+  const csvContent = header.join(';') + '\n' + values.join(';');
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `resumen-${mesLabel.replace(/\s/g,'-')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Excel exportado ✓', 'success');
 }
 
 function poblarSelectsComparacion() {
@@ -1195,47 +1403,10 @@ function renderPerfil() {
     <div class="ind-row"><span class="ind-row-label">Mejor CDT disponible</span><span class="ind-row-val" style="color:var(--income)">${col.mejorCDT}% E.A.</span></div>
     <div class="ind-row" style="font-size:0.75rem;justify-content:space-between;align-items:center;">
       <span style="color:var(--text3)">📅 ${updatedLabel} · DANE / Superfinanciera</span>
-      <button class="tx-btn" id="btn-update-indicators" onclick="forceUpdateIndicators()" title="Actualizar indicadores ahora" style="font-size:0.72rem;padding:4px 8px;">
-        <i class="fas fa-rotate"></i> Actualizar
-      </button>
+
     </div>`;
 }
 
-async function forceUpdateIndicators() {
-  const btn = document.getElementById('btn-update-indicators');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando...'; }
-  showToast('Consultando indicadores actualizados...', 'info');
-  const ok = await updateColombiaIndicators(true);
-  if (ok) {
-    showToast('Indicadores actualizados ✓', 'success');
-    renderPerfil();
-  } else {
-    showToast('No se pudieron actualizar. Revisa tu conexión.', 'error');
-    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-rotate"></i> Actualizar'; }
-  }
-}
-
-function openEditPerfil() {
-  const p = APP.profile;
-  // Mostrar foto actual en el modal
-  const previewEl = document.getElementById('edit-perfil-photo-preview');
-  if (previewEl) {
-    previewEl.style.backgroundImage = p.photo ? `url(${p.photo})` : 'none';
-    previewEl.innerHTML = p.photo ? '' : '<i class="fas fa-camera"></i>';
-  }
-  document.getElementById('edit-perfil-name').value = p.name || '';
-  document.getElementById('edit-perfil-occupation').value = p.occupation || '';
-  document.getElementById('edit-perfil-worktype').value = p.workType || 'empleado';
-  document.getElementById('edit-perfil-city').value = p.city || '';
-  document.getElementById('edit-perfil-salary').value = p.monthlySalary || 0;
-  document.getElementById('edit-perfil-people-home').value = p.peopleAtHome || 0;
-  document.getElementById('edit-perfil-people-support').value = p.peopleSupport || 0;
-  document.getElementById('edit-perfil-housing').value = p.housing || 'arriendo';
-  document.getElementById('edit-perfil-partner').checked = !!p.hasPartner;
-  document.getElementById('edit-perfil-children').checked = !!p.hasChildren;
-  document.getElementById('edit-perfil-pets').checked = !!p.hasPets;
-  document.getElementById('edit-perfil-modal').classList.remove('hidden');
-}
 
 // =============================================
 // GUARDAR / CERRAR MODAL EDITAR PERFIL

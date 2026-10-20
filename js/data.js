@@ -184,6 +184,8 @@ let currentMonth = new Date().getMonth();
 let currentYear = new Date().getFullYear();
 let movFilter = 'todos';
 let reportPeriod = 'mes';
+let reportMonth = new Date().getMonth() + 1; // 1-12, for custom month selection
+let reportYear  = new Date().getFullYear();
 
 // ---- LocalStorage ----
 function saveData() {

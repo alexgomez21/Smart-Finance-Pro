@@ -814,6 +814,43 @@ function setPeriod(period, btn) {
   reportPeriod = period;
   document.querySelectorAll('.period-tab').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
+  const picker = document.getElementById('report-month-picker');
+  if (picker) {
+    if (period === 'mes-elegir') {
+      picker.style.display = 'flex';
+      picker.classList.remove('hidden');
+      initReportMonthPicker();
+    } else {
+      picker.style.display = 'none';
+      picker.classList.add('hidden');
+      // Reset to current month
+      reportMonth = new Date().getMonth() + 1;
+      reportYear  = new Date().getFullYear();
+    }
+  }
+  renderReportes();
+}
+
+function initReportMonthPicker() {
+  const now = new Date();
+  const yearSel = document.getElementById('report-year-select');
+  if (!yearSel || yearSel.options.length > 0) return;
+  const startYear = now.getFullYear() - 3;
+  for (let y = now.getFullYear(); y >= startYear; y--) {
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y;
+    if (y === now.getFullYear()) opt.selected = true;
+    yearSel.appendChild(opt);
+  }
+  const mSel = document.getElementById('report-month-select');
+  if (mSel) mSel.value = now.getMonth() + 1;
+}
+
+function setReportMonthYear() {
+  const m = parseInt(document.getElementById('report-month-select')?.value);
+  const y = parseInt(document.getElementById('report-year-select')?.value);
+  if (m) reportMonth = m;
+  if (y) reportYear = y;
   renderReportes();
 }
 
