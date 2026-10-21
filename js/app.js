@@ -1281,11 +1281,16 @@ Responde con estas secciones:
 
   try {
     // Usar Gemini (misma key que ai.js)
-    const resp = await fetch(GROQ_URL, {
+    const resp = await fetch(OPENROUTER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        'HTTP-Referer': 'https://alexgomez21.github.io/Smart-Finance-Pro/',
+        'X-Title': 'Smart Finance Pro - FinIA'
+      },
       body: JSON.stringify({
-        model: GROQ_MODEL,
+        model: OPENROUTER_MODEL,
         messages: [
           { role: 'system', content: 'Eres FinIA, asesor financiero experto en Colombia. Responde en español, de forma clara y práctica.' },
           { role: 'user', content: prompt }
