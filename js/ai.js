@@ -8,7 +8,7 @@
 
 const OPENROUTER_API_KEY = "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";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const OPENROUTER_MODEL = "meta-llama/llama-3.3-70b-instruct"; // Modelo OpenRouter
+const OPENROUTER_MODEL = "google/gemini-2.0-flash-exp:free"; // Modelo gratuito OpenRouter
 
 let finiaMessages = [];
 let finiaOpen = false;
